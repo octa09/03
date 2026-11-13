@@ -1966,9 +1966,7 @@
         const [tx, ty, tz] = aplicar(m, [0, LATERAL_LARGO - 10, 0]);
         const h = -ty;
         const mano = [...caja(tx - 24, tx + 24, h - 20, h + 20, tz - 4, tz + 34, BLANCO),    // puño
-                      ...caja(tx - 11, tx + 11, h + 20, h + 92, tz + 6, tz + 26, BLANCO)];   // dedo
-        // con borde negro: si no, el dedo blanco no se distingue delante del cuerpo blanco
-        for (const c of mano) { c.bordes = [true, true, true, true]; c.trazo = true; }
+                      ...caja(tx - 16, tx + 16, h + 20, h + 62, tz + 3, tz + 31, BLANCO)];   // dedo (corto y gordo)
         caras.push(...mano);
       }
       colocar(caras, mCuerpo, 1, lista, null, 'brazo');
@@ -3496,6 +3494,14 @@
     mueble(2, caja(2160, 2240, 0, 42, 580, 660, '#9b6bd3'), caja(2165, 2235, 42, 46, 585, 655, '#b48be0'));
     mueble(2, caja(2300, 2360, 0, 60, 380, 440, MADERA), caja(2318, 2342, 60, 108, 398, 422, '#fff2b8'));
 
+    // Su forma de ser (de 0 a 1): paciencia, cuidado (torpe ↔ cuidadoso), generoso, irritable (gruñón),
+    // orgulloso, perezoso (flojo), alegre y aprende (qué tan rápido aprende). Cada vez cambia un poquito.
+    function forma(p) {
+      for (const k of ['paciencia', 'cuidado', 'generoso', 'irritable', 'orgulloso', 'perezoso', 'alegre'])
+        p[k] = limitar(p[k] + (Math.random() - 0.5) * 0.2, [0.05, 0.95]);
+      p.aprende = limitar(p.aprende + (Math.random() - 0.5) * 0.2, [0.4, 1.3]);
+      return p;
+    }
     function crearPersonaje(datos) {
       return {
         pos: { x: 0, z: 0 }, vel: { x: 0, z: 0 }, mente: menteNueva(), golpe: golpeNuevo(),
@@ -3517,7 +3523,8 @@
       cama: { lado: LADO_CAMA, acostado: ACOSTADO },
       // su forma de ser: cada cuánto le da hambre y sueño, cuánto aguanta, qué tan miedoso,
       // qué tan rencoroso (más = le dura más) y qué tan curioso es para probar cosas nuevas
-      pers: { hambreCada: 300, suenoCada: 480, aguante: 1, miedoso: 1, rencoroso: 1.25, curiosidad: 0.75, gloton: 1 },
+      pers: forma({ hambreCada: 300, suenoCada: 480, aguante: 1, miedoso: 1, rencoroso: 1.25, curiosidad: 0.75, gloton: 1,
+                    paciencia: 0.8, cuidado: 0.75, generoso: 0.35, irritable: 0.7, orgulloso: 0.8, perezoso: 0.55, alegre: 0.3, aprende: 0.7 }),
     });
     // El pequeño: más chico, más rápido, más juguetón y con dos mechones
     const domChico = jugador.cloneNode(true);
@@ -3527,7 +3534,8 @@
       pos: { x: -250, z: 250 }, orientacion: 0.6,
       dom: { jugador: domChico, personaje: domChico.querySelector('.personaje'), sombra: domChico.querySelector('.sombra') },
       cama: { lado: [2250, 0, 420], acostado: { x: CAMITA.x0 + 20, z: (CAMITA.z0 + CAMITA.z1) / 2, altura: CAMITA.colchon + 70 * 0.65 } },
-      pers: { hambreCada: 245, suenoCada: 400, aguante: 1.2, miedoso: 1.4, rencoroso: 0.95, curiosidad: 1, gloton: 1.2 },
+      pers: forma({ hambreCada: 245, suenoCada: 400, aguante: 1.2, miedoso: 1.4, rencoroso: 0.95, curiosidad: 1, gloton: 1.2,
+                    paciencia: 0.2, cuidado: 0.3, generoso: 0.8, irritable: 0.35, orgulloso: 0.25, perezoso: 0.2, alegre: 0.8, aprende: 1.1 }),
     });
     Object.assign(CHICO.mente, { animo: 'jugueton', animos: { jugueton: 3, curioso: 1.5, tranquilo: 0.8, aburrido: 0.6 } });
     Object.assign(CHICO.mente.nec, { hambre: 0.42, sueno: 0.1 });
@@ -3537,6 +3545,8 @@
     CHICO.mente.palabras = new Set(['YO', 'NO', 'SI', 'MI', 'HOLA', 'PEQUEÑO', 'SOL']);
     Object.assign(GRANDE.mente, { habDibujo: 0.35, habEscribir: 0.5 });
     Object.assign(CHICO.mente, { habDibujo: 0.05, habEscribir: 0 });
+    // cuánto cree cada uno que hay que dejar el huevo en el sartén: el paciente lo deja de más, el impaciente de menos
+    for (const pj of [GRANDE, CHICO]) Object.assign(pj.mente, { tiempoFrito: 1.2 + pj.pers.paciencia * 8 + azarEntre(-0.6, 0.6), habCocina: pj === GRANDE ? 0.1 : 0 });
     GANAS.jugueton = { pasear: 1, brincar: 2, saludar: 0.8, patear: 1.8, lanzar: 1.8, malabares: 1.2, encestar: 1.5,
                        cabeza: 1.2, pintar: 1, boton: 1.2, perseguir: 1, jugarCon: 0.9, molestar: 0.7, saludarOtro: 0.4 };
     // lo que hace el pequeño en su pieza (en cualquier ánimo)
@@ -3619,6 +3629,8 @@
         caja(FOGON.x + 44, FOGON.x + 50, 34, 70, FOGON.z - 50, FOGON.z + 50, '#5a5652'),
         caja(FOGON.x - 44, FOGON.x + 44, 66, 70, FOGON.z - 20, FOGON.z - 15, '#5a5652'),  // la parrilla
         caja(FOGON.x - 44, FOGON.x + 44, 66, 70, FOGON.z + 15, FOGON.z + 20, '#5a5652'),
+        caja(FOGON.x - 30, FOGON.x + 30, 70, 76, FOGON.z - 30, FOGON.z + 30, '#3c3c42'),          // el sartén
+        caja(FOGON.x - 4, FOGON.x + 4, 72, 76, FOGON.z - 95, FOGON.z - 30, '#2a2a2e'),           // su mango
         caja(CANASTA.x0, CANASTA.x1, 0, 24, CANASTA.z0, CANASTA.z1, '#b98a52'),       // la canasta
         caja(CANASTA.x0 - 2, CANASTA.x0 + 4, 24, 56, -111, -105, '#9a6e3e'),
         caja(CANASTA.x1 - 4, CANASTA.x1 + 2, 24, 56, -111, -105, '#9a6e3e'),
@@ -3764,7 +3776,7 @@
       if (RECURSOS.nido.length >= 8) return;
       RECURSOS.nido.push(huevoNuevo());
       // quien les dio de comer o de tomar hace poco lo relaciona con el huevo
-      for (const r of CUIDADOS.filter(r => reloj - r.t < 150)) conPersonaje(r.pj, () => {
+      for (const r of CUIDADOS.filter((r, i, l) => reloj - r.t < 150 && l.findIndex(q => q.pj === r.pj && q.a === r.a && reloj - q.t < 150) === i)) conPersonaje(r.pj, () => {
         aprender(r.a, 0.9, 0.25);
         mente.cuidado = Math.min(1, mente.cuidado + 0.08);
         if (!mente.sabeHuevos && cuartoDe(pos.x) === PATIO && mente.tAviso <= 0) {
@@ -3780,6 +3792,15 @@
         const cariño = Math.max(0, cosaV(g.nombre)) + Math.max(0, cosaV('las gallinas')) * 0.5;
         mente.emo.tristeza = Math.min(1, mente.emo.tristeza + 0.12 + cariño * 0.7);
         if (cariño > 0.3) mente.perdidas = [...(mente.perdidas || []), g.nombre].slice(-3);
+        // ¿quién las cuidó? si él sí y el otro no, lo culpa
+        if (causa !== 'golpes') {
+          const mios = CUIDADOS.filter(c => c.pj === yo).length, delOtro = CUIDADOS.filter(c => c.pj === otroDe(yo)).length;
+          if (mios > delOtro && yo.pers.irritable * azarEntre(0.6, 1.4) > 0.45) {
+            mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.2); mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.12);
+            cosa('el otro', -0.1); cambiarRelacion(-0.08);
+            mente.aviso = RETOS.gallinas[Math.floor(Math.random() * 2)]; mente.tAviso = 2.2;
+          }
+        }
         // aprenden por las malas que hay que cuidarlas
         if (causa !== 'golpes') { mente.cuidado = Math.min(1, mente.cuidado + 0.3); aprender('alimentarGallinas', 0.7, 0.3); aprender('darAgua', 0.6, 0.3); }
         else if (mente.conciencia > 0.3) { mente.rencor.camara = Math.min(1, mente.rencor.camara + 0.1 + cariño * 0.4); cosa('la cámara', -0.2 - cariño); }
@@ -3826,13 +3847,14 @@
         });
       }
       for (const p of PLANTAS) p.crec = Math.min(1, p.crec + dt * p.vel);
+      moverSarten(dt);
       // si el corral queda vacío (y no hay huevos que vayan a nacer), al rato llega una gallina perdida
       if (!GALLINAS.some(g => g.estado !== 'muerta') && !RECURSOS.nido.some(h => h.nace && !h.podrido)) {
         tSinGallinas += dt;
         if (tSinGallinas > 90) { tSinGallinas = 0; const g = nuevaGallina(-1650, -400); g.cacareo = 2; g.dice = '¿coc?'; anunciar(`llegó una gallina perdida: ${g.nombre}`); }
       } else tSinGallinas = 0;
       for (let i = MANCHAS.length - 1; i >= 0; i--) if ((MANCHAS[i].t += dt) > 30) MANCHAS.splice(i, 1);
-      for (let i = CUIDADOS.length - 1; i >= 0; i--) if (reloj - CUIDADOS[i].t > 160) CUIDADOS.splice(i, 1);
+      for (let i = CUIDADOS.length - 1; i >= 0; i--) if (reloj - CUIDADOS[i].t > 320) CUIDADOS.splice(i, 1);
       for (let i = VUELOS.length - 1; i >= 0; i--) {
         const v = VUELOS[i];
         v.vy -= 1800 * dt; v.x += v.vx * dt; v.y += v.vy * dt; v.z += v.vz * dt;
@@ -3858,6 +3880,7 @@
       if (l.que === 'huevo' || l.que === 'huevos') {
         mancha(m[0], m[2]);
         decir(l.que === 'huevos' ? '¡se me rompieron los huevos!' : '¡se me rompió el huevo!');
+        errorAlCocinar('huevoRoto', yo);
         mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.08);
       } else if (l.que === 'gallina') {
         const g = l.gallina;
@@ -3876,7 +3899,7 @@
     };
     // con qué cosa tiene que ver cada actividad (si odia esa cosa, le dan menos ganas)
     const COSA_DE = {
-      comerMaiz: 'el maíz', comerHuevoCrudo: 'los huevos crudos', cocinarHuevo: 'los huevos cocidos', cocinarGallina: 'el pollo asado',
+      comerMaiz: 'el maíz', comerHuevoCrudo: 'los huevos crudos', cocinarHuevo: 'los huevos fritos', cocinarParaOtro: 'el otro', cocinarGallina: 'el pollo asado',
       alimentarGallinas: 'las gallinas', darAgua: 'las gallinas', mirarGallinas: 'las gallinas', acariciarGallina: 'las gallinas',
       encestar: 'los cubos', apilar: 'los cubos', malabares: 'los cubos', patear: 'los cubos', lanzar: 'los cubos', cabeza: 'los cubos',
       boton: 'los botones', pintar: 'pintar', borrar: 'pintar', jugarCon: 'el otro', saludarOtro: 'el otro', perseguir: 'el otro',
@@ -3887,6 +3910,7 @@
       if (!a) return;
       const k = mente.K[a] || (mente.K[a] = { n: 0, v: 0 });
       k.n++;
+      tasa = Math.min(0.9, tasa * ((yo.pers && yo.pers.aprende) || 1));   // cada uno aprende a su ritmo
       k.v = limitar(k.v + tasa * (r - k.v), [-1.5, 1.5]);
       gustar(a, 1 + (r >= 0 ? 0.2 : 0.25) * r * tasa / 0.35);
     }
@@ -3926,6 +3950,7 @@
       g.sentarse = (g.sentarse || 0.2) + 5 * n.fatiga ** 2 + 2 * e.tristeza;
       g.tirarse = (g.tirarse || 0.1) + 2 * n.fatiga ** 2 + e.tristeza;
       if (yo.escala < 0.8) g.puf = (g.puf || 0) + 4 * n.fatiga ** 2;
+      for (const k of ['sentarse', 'tirarse', 'dormir', 'puf']) if (g[k]) g[k] *= 0.6 + yo.pers.perezoso;   // el flojo descansa más
       for (const k of ['brincar', 'jugarCon', 'pintar', 'saludarOtro', 'malabares']) if (g[k]) g[k] *= 1 + e.alegria;
       for (const k of ['patear', 'lanzar']) if (g[k]) g[k] *= 1 + 2 * e.enojo;
       // con rencor, le dan ganas de molestar al otro y no de jugar con él
@@ -3952,7 +3977,12 @@
       if (RECURSOS.maiz >= 1) w.comerMaiz = (0.03 + apetito * 0.8) * c('comerMaiz');
       if (huevos) {
         w.comerHuevoCrudo = (0.03 + apetito) * c('comerHuevoCrudo');
-        w.cocinarHuevo = (0.03 + apetito * 1.1) * c('cocinarHuevo') * fuego;
+        if (sartenLibre()) {
+          w.cocinarHuevo = (0.03 + apetito * 1.1) * c('cocinarHuevo') * fuego;
+          const o = otroDe(yo), hOtro = o.mente.nec.hambre;
+          if (hOtro > 0.45 && RELACION.v > -0.3 && mente.rencor.otro < 0.4 && o.mente.acostado < 0.5)
+            w.cocinarParaOtro = yo.pers.generoso * hOtro * hOtro * 6 * c('cocinarParaOtro') * fuego * (1 + Math.max(0, RELACION.v));
+        }
         if (e.enojo > 0.3 || mente.rencor.otro > 0.25 || yo.escala < 0.8)
           w.lanzarHuevo = (0.04 + e.enojo * 1.2 + mente.rencor.otro * 1.5) * c('lanzarHuevo');
       }
@@ -3975,6 +4005,8 @@
       }
       if (PLANTAS.some(p => p.crec >= 1)) w.cosechar = (0.1 + (RECURSOS.maiz < 5 ? 0.8 : 0.15) + apetito * 0.3) * c('cosechar');
       if (RECURSOS.nido.length) w.recogerHuevos = (0.12 + RECURSOS.nido.length * 0.2 + apetito * 0.3) * c('recogerHuevos');
+      const flojo = yo.pers.perezoso;
+      for (const k of ['alimentarGallinas', 'darAgua', 'cosechar', 'recogerHuevos', 'cocinarParaOtro']) if (w[k]) w[k] *= 1.4 - flojo * 0.9;
       for (const k in w) {
         if (COSA_DE[k]) w[k] *= limitar(1 + cosaV(COSA_DE[k]), [0.15, 2]);
         if (mente.castigos[k]) w[k] *= Math.pow(0.8, mente.castigos[k]);
@@ -3999,15 +4031,226 @@
         yo.lleva = { que: 'huevo', huevo: j.huevo };
       },
     };
+    // =====================================================================
+    //  HUEVOS FRITOS en el sartén del fogón de afuera. Nadie les dice cuánto
+    //  dejarlo: cada uno tiene su idea (según su paciencia) y la va corrigiendo
+    //  según cómo le salió. Se equivocan: lo sacan crudo, lo queman, se les cae
+    //  al fuego, le queda cáscara, les salta el aceite. Y el otro, si mira, opina.
+    // =====================================================================
+    const SARTEN = { x: FOGON.x, z: FOGON.z, huevo: null, reservado: null };
+    const sartenLibre = () => !SARTEN.huevo && (!SARTEN.reservado || SARTEN.reservado.pj === yo || reloj - SARTEN.reservado.t > 45);
+    // cómo queda según cuánto rato estuvo en el sartén
+    const puntoDe = t => t < 2.6 ? 'crudo' : t < 3.8 ? 'blandito' : t < 5.6 ? 'perfecto' : t < 7.6 ? 'tostado' : 'quemado';
+    const FRITOS = {
+      crudo:    { llena: 0.3,  mal: 0.35, sabor: -0.3, dice: 'mmm... quedó crudo' },
+      blandito: { llena: 0.42, mal: 0.06, sabor: 0,    dice: 'quedó blandito' },
+      perfecto: { llena: 0.5,  mal: 0.01, sabor: 0.35, dice: '¡me quedó perfecto!' },
+      tostado:  { llena: 0.4,  mal: 0.01, sabor: -0.1, dice: 'un poco tostado...' },
+      quemado:  { llena: 0.2,  mal: 0.08, sabor: -0.7, dice: '¡se me quemó!' },
+    };
+    // los pasos: sacar un huevo, cascarlo en el sartén, freírlo el rato que él cree, sacarlo y comérselo (o llevárselo al otro)
+    function pasosFreir(paraOtro) {
+      return [tomarHuevo,
+        en('fogon', { dur: 1.2, pose: 'fogon', dice: paraOtro ? 'te voy a hacer un huevo' : 'a freír un huevo...', al: j => cascarHuevo(j) }),
+        en('fogon', { dur: j => j.tFreir, pose: 'fogon', cada: (j, dt) => friendo(j, dt), al: j => sacarHuevo(j) }),
+        paraOtro
+          ? { antes: j => { j.o = otroDe(yo); return !!yo.lleva; },
+              donde: j => { const o = j.o, d = distA(o) || 1; return dentroDelCuarto(CUARTOS[cuartoDe(o.pos.x)], o.pos.x + (pos.x - o.pos.x) / d * 170, o.pos.z + (pos.z - o.pos.z) / d * 170); },
+              giro: j => Math.atan2(j.o.pos.x - pos.x, j.o.pos.z - pos.z), mirar: j => ({ pj: j.o }), dur: 1.2, pose: 'agarrar', al: j => entregarHuevo(j) }
+          : { dur: 2.4, pose: 'comer', dice: 'ñam', al: j => comerFrito(j) }];
+    }
+    function cascarHuevo(j) {
+      const hab = mente.habCocina, P = yo.pers, h = j.huevo;
+      SARTEN.reservado = { pj: yo, t: reloj };
+      yo.lleva = null;
+      const error = 0.45 * (1 - hab) * (1.35 - P.cuidado);
+      if (Math.random() < error * 0.35) {   // se le resbala y cae a las brasas
+        mente.aviso = '¡se me cayó al fuego!'; mente.tAviso = 2;
+        SARTEN.reservado = null; SARTEN.llamarada = 1;
+        mente.habCocina = Math.min(1, hab + 0.02 * P.aprende);
+        recompensa(j.tipo, -0.5);
+        errorAlCocinar('fuego', yo, j.tipo === 'cocinarParaOtro');
+        return false;
+      }
+      SARTEN.huevo = { t: 0, quien: yo, cascara: Math.random() < error * 0.6, podrido: h && h.podrido };
+      if (SARTEN.huevo.cascara) { mente.aviso = 'uy... se cayó un poco de cáscara'; mente.tAviso = 1.6; }
+      // cuánto lo va a dejar: lo que cree que está bien, con la imprecisión de quien sabe poco; el impaciente lo saca antes
+      let t = mente.tiempoFrito * (1 + (Math.random() - 0.5) * 0.9 * (1 - hab * 0.8));
+      if (Math.random() < (1 - P.paciencia) * 0.45) t *= azarEntre(0.5, 0.8);
+      j.tFreir = limitar(t, [1, 14]);
+    }
+    function friendo(j, dt) {
+      mente.mirarA = [SARTEN.x, -80, SARTEN.z];
+      const P = yo.pers;
+      // le salta el aceite
+      if (!j.salto && Math.random() < dt * 0.06 * (1 - mente.habCocina) * (1.3 - P.cuidado)) {
+        j.salto = true;
+        mente.nec.salud = Math.max(0, mente.nec.salud - 0.04);
+        mente.emo.miedo = Math.min(1, mente.emo.miedo + 0.2);
+        mente.miedos['el fogón'] = Math.min(1, (mente.miedos['el fogón'] || 0) + 0.15);
+        cosa('el fogón', -0.12);
+        yo.ay = '¡ay, salta el aceite!'; golpe.t = 0.5; golpe.vx -= 160;
+      }
+      if (!j.dudo && P.paciencia < 0.5 && j.t < j.tFreir * 0.5 && mente.tAviso <= 0) { j.dudo = true; mente.aviso = '¿ya estará?'; mente.tAviso = 1.4; }
+    }
+    function sacarHuevo(j) {
+      const h = SARTEN.huevo;
+      SARTEN.reservado = null;
+      if (!h || h.quien !== yo) return false;
+      SARTEN.huevo = null;
+      const punto = puntoDe(h.t);
+      Object.assign(j, { punto, cascara: h.cascara, podrido: h.podrido, tReal: h.t });
+      yo.lleva = { que: 'huevoFrito', punto };
+      // aprende de a poco cuánto dejarlo, según cómo le salió (y según qué tan rápido aprende)
+      const P = yo.pers, antes = mente.tiempoFrito;
+      const ajuste = { crudo: 0.9, blandito: 0.35, perfecto: (4.7 - h.t) * 0.15, tostado: -0.45, quemado: -1.1 }[punto];
+      mente.tiempoFrito = limitar(antes + ajuste * P.aprende * azarEntre(0.3, 1.1), [1.2, 12]);   // de a poco (y a veces casi nada)
+      mente.habCocina = Math.min(1, mente.habCocina + 0.025 * P.aprende + (punto === 'perfecto' ? 0.015 : 0));
+      mente.fritos = [...(mente.fritos || []), punto].slice(-6);
+      mente.aviso = FRITOS[punto].dice; mente.tAviso = 2;
+      if (punto === 'perfecto') { cosa('el fogón', 0.08); mente.emo.alegria = Math.min(1, mente.emo.alegria + 0.2); }
+      if (punto === 'crudo' || punto === 'quemado') errorAlCocinar(punto, yo, j.tipo === 'cocinarParaOtro');
+      else miraYAprende(yo, h.t, punto);
+    }
+    function comerFrito(j) {
+      comer('cocinarHuevo', 'frito_' + j.punto, { podrido: j.podrido, cascara: j.cascara });
+    }
+    // se lo lleva al otro: si está rico, se pone contento; si está mal hecho, reclama
+    function entregarHuevo(j) {
+      const o = j.o, punto = j.punto, cocinero = yo;
+      if (!o || distA(o) > 320 || o.mente.acostado > 0.5 || o.mente.dormidoPiso || o.mente.desmayo) {
+        mente.aviso = 'bueno, me lo como yo'; mente.tAviso = 1.6;
+        comerFrito(j); return;
+      }
+      yo.lleva = null;
+      let r = 0;
+      if (o.mente.nec.hambre < 0.2) {   // ya había comido: igual lo agradece
+        conPersonaje(o, () => { mente.aviso = 'ya comí... pero gracias'; mente.tAviso = 1.8; cambiarRelacion(0.05); });
+        recompensa('cocinarParaOtro', 0.2); return;
+      }
+      conPersonaje(o, () => {
+        r = comer('regalo', 'frito_' + punto, { podrido: j.podrido, cascara: j.cascara, sinSoltar: true });
+        if (r > 0.3) {
+          mente.aviso = punto === 'perfecto' ? '¡gracias, está riquísimo!' : '¡gracias!'; mente.tAviso = 2;
+          cambiarRelacion(0.12); cosa('el otro', 0.15);
+          mente.rencor.otro = Math.max(0, mente.rencor.otro - 0.15);
+        }
+      });
+      if (r > 0.3) {
+        recompensa('cocinarParaOtro', 0.8);
+        mente.emo.alegria = Math.min(1, mente.emo.alegria + 0.25); cosa('el otro', 0.06);
+      } else {
+        recompensa('cocinarParaOtro', -0.3);
+        errorAlCocinar(punto === 'crudo' || punto === 'quemado' ? punto : 'malo', cocinero, true, true);
+      }
+    }
+    // El otro lo vio hacerlo bien: aprende un poco de él (cuánto dejarlo)
+    function miraYAprende(cocinero, t, punto) {
+      conPersonaje(otroDe(cocinero), () => {
+        if (distA(cocinero) > 900 || mente.acostado > 0.5 || mente.dormidoPiso || mente.desmayo) return;
+        if (punto !== 'perfecto' && punto !== 'blandito') return;
+        mente.tiempoFrito += (t - mente.tiempoFrito) * 0.3 * yo.pers.aprende;
+        mente.habCocina = Math.min(1, mente.habCocina + 0.015 * yo.pers.aprende);
+        if (mente.tAviso <= 0 && Math.random() < 0.4) { mente.aviso = 'ah, así se fríe...'; mente.tAviso = 1.6; }
+      });
+    }
+    // ---- Cuando uno lo hace mal, el otro reacciona según su forma de ser ----
+    // gruñón → lo reta (y puede terminar en pelea si el otro es orgulloso) · sabe más → le aconseja · si no, se ríe o no le importa
+    const RETOS = {
+      quemado: ['¡lo quemaste!', '¡otra vez quemado!', 'qué olor a quemado...'], crudo: ['¡está crudo!', 'déjalo más rato, ¿no ves?'],
+      fuego: ['¡botaste el huevo!', '¡se cayó al fuego, torpe!'], huevoRoto: ['¡rompiste el huevo!', '¡cuidado con los huevos!'],
+      malo: ['esto está malo...', '¡qué asco!'], gallinas: ['¡no las cuidaste!', '¡se murió por tu culpa!'],
+      olvidado: ['¡dejaste el huevo quemándose!'],
+    };
+    function errorAlCocinar(tipo, quien, paraMi, loComio) {
+      if (!quien) return;
+      const cocinero = quien;
+      let reto = false, consejo = null;
+      conPersonaje(otroDe(cocinero), () => {
+        if ((!loComio && distA(cocinero) > 900) || mente.acostado > 0.5 || mente.dormidoPiso || mente.desmayo) return;
+        const P = yo.pers;
+        const escaso = RECURSOS.canasta.length + RECURSOS.nido.length < 2;   // se perdió algo que hacía falta
+        const molestia = P.irritable * azarEntre(0.5, 1.5) * (escaso ? 1.4 : 1) * (1 - Math.max(0, RELACION.v) * 0.5) *
+                         (paraMi ? 1.6 : 1) * (1 + mente.rencor.otro) * (mente.nec.hambre > 0.6 ? 1.3 : 1);
+        if (molestia > 0.5) {
+          reto = true;
+          mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.1 + 0.2 * molestia);
+          mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.06 * molestia);
+          cosa('el otro', -0.06 * molestia);
+          cambiarRelacion(-0.05 * molestia);
+          const f = RETOS[tipo] || RETOS.malo;
+          mente.aviso = f[Math.floor(Math.random() * f.length)]; mente.tAviso = 2;
+          if (molestia > 1 && Math.random() < 0.35) hacerDedo('otro', '');
+        } else if ((tipo === 'crudo' || tipo === 'quemado') && mente.habCocina > cocinero.mente.habCocina + 0.1 && Math.random() < 0.7) {
+          consejo = mente.tiempoFrito;
+          mente.aviso = tipo === 'crudo' ? 'déjalo más rato' : 'sácalo antes'; mente.tAviso = 1.8;
+        } else if (mente.tAviso <= 0 && Math.random() < 0.5) {
+          mente.aviso = P.alegre > 0.6 ? 'jaja, no importa' : P.generoso > 0.6 ? 'tranquilo, pasa' : 'jaja'; mente.tAviso = 1.6;
+        }
+      });
+      if (reto) {
+        // el que lo hizo mal: si es orgulloso se enoja de vuelta; si no, le da pena
+        conPersonaje(cocinero, () => {
+          const P = yo.pers;
+          if (P.orgulloso * azarEntre(0.5, 1.5) > 0.55) {
+            mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.15 + 0.2 * P.orgulloso);
+            mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.08 * P.orgulloso);
+            cosa('el otro', -0.06); cambiarRelacion(-0.04);
+            setTimeout(() => conPersonaje(cocinero, () => {
+              const f = ['¡hazlo tú entonces!', 'no me molestes', '¡tú lo haces peor!'];
+              mente.aviso = f[Math.floor(Math.random() * f.length)]; mente.tAviso = 2;
+              if (P.orgulloso > 0.6 && Math.random() < 0.35) hacerDedo('otro', '');
+            }), 1300);
+          } else {
+            mente.emo.tristeza = Math.min(1, mente.emo.tristeza + 0.15 + 0.15 * (1 - P.orgulloso));
+            setTimeout(() => conPersonaje(cocinero, () => { mente.aviso = 'perdón...'; mente.tAviso = 1.6; }), 1300);
+          }
+        });
+      } else if (consejo !== null) {
+        // le hace caso (si aprende fácil y no es tan orgulloso)
+        conPersonaje(cocinero, () => {
+          const P = yo.pers, caso = P.aprende * (1.2 - P.orgulloso);
+          mente.tiempoFrito += (consejo - mente.tiempoFrito) * limitar(caso * 0.5, [0, 0.6]);
+          setTimeout(() => conPersonaje(cocinero, () => { mente.aviso = caso > 0.5 ? 'ah, ya veo' : 'sí, sí...'; mente.tAviso = 1.6; }), 1200);
+          cambiarRelacion(0.03);
+        });
+      }
+    }
+    // cada cuadro: el huevo se sigue friendo (aunque nadie lo saque...)
+    function moverSarten(dt) {
+      SARTEN.llamarada = Math.max(0, (SARTEN.llamarada || 0) - dt);
+      const h = SARTEN.huevo;
+      if (!h) return;
+      h.t += dt;
+      const j = h.quien.mente.juego;
+      const atendido = j && (j.tipo === 'cocinarHuevo' || j.tipo === 'cocinarParaOtro');
+      if (!atendido && h.t > 11) {
+        SARTEN.huevo = null; SARTEN.reservado = null; SARTEN.llamarada = 0.6;
+        anunciar(`el ${h.quien.nombre} dejó un huevo quemándose`);
+        conPersonaje(h.quien, () => { mente.tiempoFrito = Math.max(1.2, mente.tiempoFrito - 0.3); });
+        errorAlCocinar('olvidado', h.quien);
+      }
+    }
+    // el sartén y el huevo que se está friendo (va cambiando de color)
+    function carasSarten() {
+      const { x, z } = SARTEN, h = SARTEN.huevo, cs = [];
+      if (h) {
+        const t = h.t;
+        const clara = t < 1.5 ? '#d9d6cf' : t < 6.2 ? '#fbfaf3' : t < 8.5 ? '#e2c08a' : '#4a3a2c';
+        const yema = t < 5.5 ? '#f5b82e' : t < 8.5 ? '#d98c1e' : '#3a2a1c';
+        cs.push(caja(x - 18, x + 16, 76, 77.5, z - 14, z + 17, clara), caja(x - 6, x + 6, 77.5, 81, z - 4, z + 7, yema));
+      }
+      if (SARTEN.llamarada > 0) cs.push(caja(x - 20, x + 20, 36, 36 + 70 * SARTEN.llamarada, z - 20, z + 20, '#ff9a3c'));
+      return sinAbajo(cs);
+    }
     const TAREAS = {
       comerMaiz: () => [
         en('saco', { dur: 1, pose: 'agarrar', al: () => { if (RECURSOS.maiz < 1) return sinMaiz(); RECURSOS.maiz--; yo.lleva = { que: 'maiz' }; } }),
         { dur: 2.6, pose: 'comer', dice: 'ñam', al: () => comer('comerMaiz', 'maiz') }],
       comerHuevoCrudo: () => [tomarHuevo,
         { dur: 2, pose: 'comer', dice: 'glup', al: j => comer('comerHuevoCrudo', 'huevoCrudo', { podrido: j.huevo && j.huevo.podrido }) }],
-      cocinarHuevo: () => [tomarHuevo,
-        en('fogon', { dur: 4.5, pose: 'fogon', dice: 'a cocinar...', al: j => cocinar(j, 'huevoCocido') }),
-        { dur: 2.4, pose: 'comer', dice: 'ñam ñam', al: j => comer('cocinarHuevo', 'huevoCocido', { podrido: j.huevo && j.huevo.podrido }) }],
+      cocinarHuevo: () => pasosFreir(false),
+      cocinarParaOtro: () => pasosFreir(true),
       cocinarGallina: () => [
         en('comedero', { dur: 2.4, pose: 'agarrar', al: j => atraparGallina(j, true) }),
         en('fogon', { dur: 6.5, pose: 'fogon', antes: j => {
@@ -4063,19 +4306,20 @@
     };
     // lo que piensa la primera vez que prueba algo
     const PRIMERA_VEZ = {
-      comerMaiz: '¿esto se come?', comerHuevoCrudo: '¿y si me como un huevo así?', cocinarHuevo: '¿y si lo pongo al fuego?',
+      comerMaiz: '¿esto se come?', comerHuevoCrudo: '¿y si me como un huevo así?', cocinarHuevo: '¿y si lo frío en el fogón?', cocinarParaOtro: '¿y si le hago un huevo?',
       cocinarGallina: 'tengo tanta hambre... esa gallina...', alimentarGallinas: '¿las gallinas comerán maíz?', darAgua: '¿tendrán sed?',
       cosechar: '¿qué tiene esa planta?', recogerHuevos: '¿qué es eso en el nido?', mirarGallinas: '¿qué son esas?',
       acariciarGallina: '¿se dejará tomar?', perseguirGallinas: '¿y si las asusto?', lanzarHuevo: '¿y si lo tiro?',
     };
     Object.assign(PENSAMIENTOS, {
-      comerMaiz: ['tengo hambre...'], comerHuevoCrudo: ['tengo hambre...'], cocinarHuevo: ['un huevito...', 'tengo hambre...'],
+      comerMaiz: ['tengo hambre...'], comerHuevoCrudo: ['tengo hambre...'], cocinarHuevo: ['un huevo frito...', 'tengo hambre...'], cocinarParaOtro: ['¿tendrá hambre?'],
       alimentarGallinas: ['las gallinas...'], cosechar: ['a juntar maíz'], recogerHuevos: ['a ver si hay huevos'],
       perseguirGallinas: ['jeje...'], dormir: ['tengo sueño...', 'qué sueño...'],
     });
     function empezarTarea(tipo) {
       const pasos = TAREAS[tipo]();
       mente.juego = { tipo, pasos, i: -1, fase: 'ir', t: 0, pose: null, atascado: 0 };
+      if (tipo === 'cocinarHuevo' || tipo === 'cocinarParaOtro') SARTEN.reservado = { pj: yo, t: reloj };
       mente.tAccion = 80;
       const k = mente.K[tipo];
       if ((!k || k.n === 0) && mente.tAviso <= 0) { mente.aviso = PRIMERA_VEZ[tipo] || '¿y si pruebo...?'; mente.tAviso = 2; }
@@ -4131,6 +4375,7 @@
     }
     function terminarTarea(j, fallo) {
       if (mente.juego !== j) return;
+      if (SARTEN.reservado && SARTEN.reservado.pj === yo && !SARTEN.huevo) SARTEN.reservado = null;
       Object.assign(mente, { juego: null, tAccion: 0.4, giroForzado: null, mirarA: null });
       if (yo.lleva) { if (fallo) soltarLleva(); else yo.lleva = null; }
     }
@@ -4210,12 +4455,13 @@
     const COMIDAS = {
       maiz:        { llena: 0.2,  nombre: 'el maíz', mal: 0.05 },
       huevoCrudo:  { llena: 0.28, nombre: 'los huevos crudos', mal: 0.4 },
-      huevoCocido: { llena: 0.45, nombre: 'los huevos cocidos', mal: 0.03 },
       pollo:       { llena: 0.95, nombre: 'el pollo asado', mal: 0.02 },
     };
+    // los huevos fritos, según cómo quedaron
+    for (const [k, f] of Object.entries(FRITOS)) COMIDAS['frito_' + k] = { llena: f.llena, nombre: 'los huevos fritos', mal: f.mal, sabor: f.sabor };
     function comer(accion, que, extra = {}) {
       const c = COMIDAS[que], n = mente.nec, e = mente.emo;
-      yo.lleva = null;
+      if (!extra.sinSoltar) yo.lleva = null;
       const antes = n.hambre;
       n.hambre = Math.max(0, n.hambre - c.llena);
       n.salud = Math.min(1, n.salud + 0.05);
@@ -4231,8 +4477,10 @@
       } else {
         e.alegria = Math.min(1, e.alegria + 0.15 + c.llena * 0.4);
         r = Math.min(1, Math.max(0, antes - 0.1) * c.llena * 3 + 0.2 + Math.max(0, cosaV(c.nombre)) * 0.3);   // más rico con más hambre
+        r += c.sabor || 0;                                    // quemado o crudo no es lo mismo
         if (antes < 0.15) r = 0.05;
-        mente.aviso = antes < 0.15 ? 'ya estaba lleno...' : r > 0.6 ? '¡qué rico!' : 'mmm'; mente.tAviso = 1.6;
+        mente.aviso = antes < 0.15 ? 'ya estaba lleno...' : (c.sabor || 0) < -0.5 ? 'puaj, sabe a quemado' : (c.sabor || 0) < -0.2 ? 'está como babosito...' : r > 0.6 ? '¡qué rico!' : 'mmm'; mente.tAviso = 1.6;
+        if (extra.cascara) { r -= 0.2; mente.aviso = 'crunch... tenía cáscara'; }
       }
       // comerse a una gallina que quería le duele
       if (extra.gallina) {
@@ -4245,7 +4493,8 @@
         }
       }
       cosa(c.nombre, r * 0.3);
-      recompensa(accion, r);
+      if (accion !== 'regalo') recompensa(accion, r);
+      return r;
     }
     function mirandoGallinas(j, dt) {
       j.cambio = (j.cambio || 0) - dt;
@@ -4382,8 +4631,10 @@
       // lo que siente se le va pasando de a poco (el enojo y el rencor son lo que más le dura)
       const baja = (x, cada) => Math.max(0, x - dt / cada);
       e.alegria = baja(e.alegria, 35);
+      const base = P.alegre * 0.35 * (1 - e.tristeza) * (1 - n.hambre * 0.6);   // el alegre anda contento solo
+      if (e.alegria < base) e.alegria = Math.min(base, e.alegria + dt / 25);
       e.miedo = baja(e.miedo, 28 * P.miedoso);
-      e.tristeza = baja(e.tristeza, 80);
+      e.tristeza = baja(e.tristeza, 80 * (1.4 - P.alegre));
       e.enojo = baja(e.enojo, 300 * P.rencoroso);
       mente.rencor.camara = baja(mente.rencor.camara, 1800 * P.rencoroso);   // el rencor dura muchos minutos
       mente.rencor.otro = baja(mente.rencor.otro, 1200 * P.rencoroso);
@@ -4407,7 +4658,7 @@
       }
       // enojado con el otro: si lo tiene cerca, de vez en cuando le saca el dedo
       if (mente.rencor.otro > 0.3 && e.enojo > 0.3 && distA(otroDe(yo)) < 650 && libre && mente.dedo <= 0 &&
-          Math.random() < dt * 0.12 * (mente.rencor.otro + e.enojo)) hacerDedo('otro');
+          Math.random() < dt * 0.12 * (mente.rencor.otro + e.enojo) * (0.5 + P.irritable * 1.2)) hacerDedo('otro');
       // lo que piensa de vez en cuando
       if (autonomo() && libre && mente.tAviso <= 0 && Math.random() < dt * 0.05) {
         const frase = n.hambre > 0.7 ? 'tengo hambre...' : n.sueno > 0.75 ? 'qué sueño...' : n.fatiga > 0.8 ? 'estoy cansado...'
@@ -4493,7 +4744,7 @@
         if (RELACION.v > 0.15 && mente.rencor.otro < 0.4) {
           mente.emo.miedo = Math.min(1, mente.emo.miedo + 0.06);
           mente.rencor.camara = Math.min(1, mente.rencor.camara + 0.025);
-          if (libreParaJugar() && Math.random() < 0.35 && !(mente.juego && TAREAS[mente.juego.tipo])) {
+          if (libreParaJugar() && Math.random() < 0.15 + 0.5 * yo.pers.generoso && !(mente.juego && TAREAS[mente.juego.tipo])) {
             soltarCubo();
             Object.assign(mente, { accion: 'consolar', meta: null, ruta: [], mirarA: null, giroForzado: null });
             empezarConOtro('consolar');
@@ -4562,7 +4813,11 @@
         case 'maiz': return [caja(x - 7, x + 7, h - 20, h + 20, z - 7, z + 7, '#f2c94c'), caja(x - 8, x + 8, h - 24, h - 12, z - 8, z + 8, '#7cc057')].flat();
         case 'huevo': return huevo(0, l.huevo && l.huevo.podrido ? '#b9c48a' : '#f6efe0');
         case 'huevos': return Array.from({ length: l.n }, (_, i) => huevo((i - (l.n - 1) / 2) * 16, '#f6efe0')).flat();
-        case 'huevoCocido': return [caja(x - 15, x + 15, h - 2, h + 2, z - 15, z + 15, '#fbfaf3'), caja(x - 6, x + 6, h + 2, h + 6, z - 6, z + 6, '#f5b82e')].flat();
+        case 'huevoFrito': {
+          const clara = { crudo: '#d9d6cf', blandito: '#fbfaf3', perfecto: '#fbfaf3', tostado: '#e2c08a', quemado: '#4a3a2c' }[l.punto];
+          const yema = { crudo: '#f5b82e', blandito: '#f5b82e', perfecto: '#f2a62a', tostado: '#d98c1e', quemado: '#3a2a1c' }[l.punto];
+          return [caja(x - 15, x + 15, h - 2, h + 2, z - 15, z + 15, clara), caja(x - 6, x + 6, h + 2, h + 6, z - 6, z + 6, yema)].flat();
+        }
         case 'balde': return [caja(x - 22, x + 22, h - 44, h - 4, z - 20, z + 20, '#6f9fd0'), ...(l.lleno ? [caja(x - 18, x + 18, h - 6, h - 3, z - 16, z + 16, '#5aa9e6')] : [])].flat();
         case 'polloCrudo': return caja(x - 22, x + 22, h - 16, h + 14, z - 18, z + 18, '#f1c6a8');
         case 'pollo': return [caja(x - 22, x + 22, h - 16, h + 14, z - 18, z + 18, '#b9733c'), caja(x + 20, x + 36, h - 4, h + 4, z - 4, z + 4, '#f3e6d0')].flat();
@@ -4597,6 +4852,7 @@
         poner(sinAbajo([caja(x - 9, x + 9, 36, 36 + h, FOGON.z - 10 + dz, FOGON.z + 10 + dz, i === 1 ? '#ffd23f' : '#f07a2b')]), null, PATIO, null);
       }
       for (const p of PLANTAS) poner(carasPlanta(p), null, PATIO, null);
+      poner(carasSarten(), null, PATIO, null);
     }
 
     // =====================================================================
@@ -4606,7 +4862,7 @@
     const panelMentes = document.querySelector('.panel.mentes'), panelRecursos = document.querySelector('.panel.recursos');
     const COLOR_STAT = { hambre: '#e0833a', sueño: '#7b6cc9', fatiga: '#c9a43a', salud: '#5bb36a' };
     const NOMBRE_ACCION = {
-      comerMaiz: 'comer maíz', comerHuevoCrudo: 'huevo crudo', cocinarHuevo: 'cocinar huevos', cocinarGallina: 'comerse una gallina',
+      comerMaiz: 'comer maíz', comerHuevoCrudo: 'huevo crudo', cocinarHuevo: 'huevos fritos', cocinarParaOtro: 'cocinarle al otro', cocinarGallina: 'comerse una gallina',
       alimentarGallinas: 'darles maíz', darAgua: 'darles agua', cosechar: 'cosechar', recogerHuevos: 'juntar huevos',
       mirarGallinas: 'mirar gallinas', acariciarGallina: 'tomar gallinas', perseguirGallinas: 'espantar gallinas', lanzarHuevo: 'tirar huevos',
       encestar: 'tirar al aro', apilar: 'hacer torres', malabares: 'malabares', patear: 'patear cubos', boton: 'el botón rojo',
@@ -4641,6 +4897,12 @@
           const sabe = Object.entries(m.K).filter(([, k]) => k.n >= 1 && Math.abs(k.v) > 0.15)
             .sort((a, b) => Math.abs(b[1].v) - Math.abs(a[1].v)).slice(0, 7)
             .map(([a, k]) => `${NOMBRE_ACCION[a] || a} ${k.v > 0 ? '✓' : '✗'}`);
+          const P = p.pers, rasgo = (v, si, no) => v >= 0.6 ? si : v <= 0.4 ? no : null;
+          const forma = [rasgo(P.paciencia, 'paciente', 'impaciente'), rasgo(P.cuidado, 'cuidadoso', 'torpe'), rasgo(P.generoso, 'generoso', 'poco generoso'),
+                         rasgo(P.irritable, 'gruñón', 'tranquilo'), rasgo(P.orgulloso, 'orgulloso', 'humilde'), rasgo(P.perezoso, 'flojo', 'trabajador'),
+                         rasgo(P.alegre, 'alegre', 'serio'), P.aprende >= 0.95 ? 'aprende rápido' : P.aprende <= 0.75 ? 'aprende lento' : null].filter(Boolean);
+          html += `<div class="det">forma de ser: ${forma.join(', ')}<br>huevo frito: lo deja ${m.tiempoFrito.toFixed(1)} s · práctica ${pct(m.habCocina)}%` +
+                  `${m.fritos ? ' · le han salido: ' + m.fritos.join(', ') : ''}</div>`;
           html += `<div class="det">le gusta: ${gusta.join(', ') || '—'}<br>odia: ${odia.join(', ') || '—'}<br>` +
                   `le teme a: ${teme.join(', ') || '—'}<br>aprendió: ${sabe.join(' · ') || 'todavía nada'}<br>` +
                   `se da cuenta de que lo miras: ${pct(m.conciencia)}%</div>`;

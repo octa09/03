@@ -3806,6 +3806,11 @@
         }
         // aprenden por las malas que hay que cuidarlas
         if (causa !== 'golpes') { mente.cuidado = Math.min(1, mente.cuidado + 0.3); aprender('alimentarGallinas', 0.7, 0.3); aprender('darAgua', 0.6, 0.3); }
+        // se murió de hambre teniendo maíz guardado: guardaba demasiado
+        if (causa === 'hambre' && RECURSOS.maiz >= 1 && (mente.reservaMaiz || 0) > 0.5) {
+          mente.reservaMaiz = Math.max(0, mente.reservaMaiz - 1.5 * yo.pers.aprende);
+          if (mente.tAviso <= 0 || cariño < 0.3) { mente.aviso = 'guardé maíz y se murió de hambre...'; mente.tAviso = 2.2; }
+        }
         else if (mente.conciencia > 0.3) { mente.rencor.camara = Math.min(1, mente.rencor.camara + 0.1 + cariño * 0.4); cosa('la cámara', -0.2 - cariño); }
         if (mente.tAviso <= 0 || cariño > 0.3) { mente.aviso = cariño > 0.3 ? `¡no, ${g.nombre}!` : `pobre ${g.nombre}...`; mente.tAviso = 2.4; }
         if (cariño > 0.5 && libreParaJugar() && !(mente.juego && TAREAS[mente.juego.tipo])) {
@@ -3988,6 +3993,8 @@
       const apetito = h * h * 5 * yo.pers.gloton;
       const fuego = 1 - (mente.miedos['el fogón'] || 0) * 0.9;
       if (RECURSOS.maiz >= 1) w.comerMaiz = (0.03 + apetito * 0.8) * c('comerMaiz');
+      // con hambre, el saco vacío y el comedero de las gallinas lleno: se da cuenta de que el maíz se fue todo para ellas
+      if (h > 0.5 && RECURSOS.maiz < 1 && RECURSOS.comedero > 2 && (mente.tNotaMaiz || 0) < reloj) { mente.tNotaMaiz = reloj + 60; sinMaiz(); }
       if (huevos) {
         w.comerHuevoCrudo = (0.03 + apetito) * c('comerHuevoCrudo');
         if (sartenLibre()) {
@@ -4016,7 +4023,7 @@
         const hambreG = vivas.reduce((s, g) => s + g.hambre, 0) / vivas.length, sedG = vivas.reduce((s, g) => s + g.sed, 0) / vivas.length;
         // si está en el patio oye a las gallinas reclamando
         const oye = cuartoDe(pos.x) === PATIO ? 3 : 1;
-        if (RECURSOS.maiz >= 1) w.alimentarGallinas = (0.08 + cuidado * (RECURSOS.comedero < poca ? 1.2 : 0.15) * (0.5 + hambreG) * (hambreG > 0.6 ? oye : 1) * preocupa + (hambreG > 0.6 && RECURSOS.comedero < n * 0.3 ? 1.2 : 0)) * c('alimentarGallinas');
+        if (maizParaGallinas() >= 1) w.alimentarGallinas = (0.08 + cuidado * (RECURSOS.comedero < poca ? 1.2 : 0.15) * (0.5 + hambreG) * (hambreG > 0.6 ? oye : 1) * preocupa + (hambreG > 0.6 && RECURSOS.comedero < n * 0.3 ? 1.2 : 0)) * c('alimentarGallinas');
         if (RECURSOS.baldeEnLlave) w.darAgua = (0.06 + cuidado * (RECURSOS.agua < pocaAgua ? 1.1 : 0.1) * (0.5 + sedG) * (sedG > 0.6 ? oye : 1) * preocupa + (sedG > 0.6 && RECURSOS.agua < n * 0.25 ? 1.2 : 0)) * c('darAgua');
       }
       const C = estadoCorral();
@@ -4283,7 +4290,20 @@
       alimentarGallinas: () => [
         en('saco', { dur: 1.2, pose: 'agarrar', al: j => {
           if (RECURSOS.maiz < 1) return sinMaiz();
-          j.n = Math.min(cuentaGallinas() > 6 ? 3 : 2, Math.floor(RECURSOS.maiz)); RECURSOS.maiz -= j.n; yo.lleva = { que: 'maiz', n: j.n };   // más gallinas, más maíz
+          // reparte: les da lo que les falta para llenar el comedero, sin tocar lo que guarda para comer
+          const puede = maizParaGallinas();
+          if (puede < 1) { mente.aviso = 'este maíz lo dejo para nosotros'; mente.tAviso = 2; return false; }
+          const falta = Math.max(1, Math.ceil((Math.max(4, cuentaGallinas() * 0.9 + 2) - RECURSOS.comedero) / 2.2));
+          j.n = Math.min(cuentaGallinas() > 6 ? 3 : 2, falta, puede); RECURSOS.maiz -= j.n; yo.lleva = { que: 'maiz', n: j.n };
+          // si deja el saco más bajo de lo que el otro quiere guardar, el otro reclama
+          const autor = yo;
+          conPersonaje(otroDe(autor), () => {
+            if (RECURSOS.maiz >= (mente.reservaMaiz || 0) || distA(autor) > 900 || mente.acostado > 0.5 || mente.dormidoPiso) return;
+            if (yo.pers.irritable * azarEntre(0.6, 1.4) * (0.5 + mente.nec.hambre) > 0.4) {
+              mente.aviso = '¡deja maíz para nosotros!'; mente.tAviso = 2;
+              mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.08); cambiarRelacion(-0.03);
+            }
+          });
         } }),
         en('comedero', { dur: 2, pose: 'verter', dice: 'coman, gallinitas', al: j => {
           RECURSOS.comedero = Math.min(12, RECURSOS.comedero + j.n * 2.2); yo.lleva = null; cuide('alimentarGallinas');
@@ -4428,8 +4448,37 @@
       });
     }
     // ---- Lo que hace en cada tarea ----
+    // Cuánto maíz puede usar para las gallinas sin tocar lo que guarda para comer ellos
+    // (salvo que las gallinas se estén muriendo de hambre y las quiera mucho, o sea muy generoso)
+    function maizParaGallinas() {
+      const vivas = GALLINAS.filter(g => g.estado === 'viva');
+      const hambreG = vivas.length ? vivas.reduce((s, g) => s + g.hambre, 0) / vivas.length : 0;
+      const rompe = hambreG > 0.7 && (cosaV('las gallinas') > 0.3 || yo.pers.generoso > 0.6);
+      return Math.floor(RECURSOS.maiz - (rompe ? 0 : mente.reservaMaiz || 0));
+    }
     function sinMaiz() {
       mente.aviso = 'no queda maíz...'; mente.tAviso = 1.8;
+      // con hambre y sin maíz porque se lo dieron todo a las gallinas: aprende a guardar una parte para comer
+      const seLoDieron = CUIDADOS.some(c => c.a === 'alimentarGallinas' && reloj - c.t < 240) || RECURSOS.comedero > 2;
+      if (mente.nec.hambre > 0.4 && seLoDieron) {
+        const antes = mente.reservaMaiz || 0;
+        mente.reservaMaiz = Math.min(6, antes + azarEntre(0.8, 1.6) * yo.pers.aprende);
+        mente.aviso = antes < 0.5 ? 'todo el maíz fue para las gallinas... voy a guardar un poco' : 'otra vez sin maíz... hay que guardar más';
+        mente.tAviso = 2.4;
+        // si fue el otro el que lo gastó, le reclama (según qué tan gruñón sea)
+        const gasto = CUIDADOS.filter(c => c.a === 'alimentarGallinas' && reloj - c.t < 240);
+        const otro = otroDe(yo);
+        if (gasto.length && gasto.every(c => c.pj === otro) && yo.pers.irritable * azarEntre(0.6, 1.4) > 0.5) {
+          mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.15); mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.06);
+          cosa('el otro', -0.05);
+          mente.aviso = '¡le diste todo el maíz a las gallinas!';
+        }
+        // el otro, si está cerca, también lo aprende (un poco)
+        conPersonaje(otro, () => {
+          if (distA(otro === GRANDE ? CHICO : GRANDE) < 900 && mente.acostado < 0.5)
+            mente.reservaMaiz = Math.min(6, (mente.reservaMaiz || 0) + 0.5 * yo.pers.aprende);
+        });
+      }
       aprender('cosechar', 0.3, 0.15);   // se da cuenta de que hay que juntar
       if (plantaMadura()) mente.despues = 'cosechar';
       return false;
@@ -4958,7 +5007,7 @@
                          rasgo(P.alegre, 'alegre', 'serio'), P.aprende >= 0.95 ? 'aprende rápido' : P.aprende <= 0.75 ? 'aprende lento' : null].filter(Boolean);
           html += `<div class="det">forma de ser: ${forma.join(', ')}<br>huevo frito: lo deja ${m.tiempoFrito.toFixed(1)} s · práctica ${pct(m.habCocina)}%` +
                   `${m.fritos ? ' · le han salido: ' + m.fritos.join(', ') : ''}<br>` +
-                  `quiere tener ${P.gallinasIdeal} gallinas${conPersonaje(p, () => { const C = estadoCorral(); return C.bajando > 0.3 ? ' · le preocupa que se estén acabando' : C.lleno > 0.3 ? ' · le preocupa que sean demasiadas' : C.faltan > 0.3 ? ' · quiere más' : ' · está conforme'; })}</div>`;
+                  `guarda ${Math.round(m.reservaMaiz || 0)} de maíz para comer · quiere tener ${P.gallinasIdeal} gallinas${conPersonaje(p, () => { const C = estadoCorral(); return C.bajando > 0.3 ? ' · le preocupa que se estén acabando' : C.lleno > 0.3 ? ' · le preocupa que sean demasiadas' : C.faltan > 0.3 ? ' · quiere más' : ' · está conforme'; })}</div>`;
           html += `<div class="det">le gusta: ${gusta.join(', ') || '—'}<br>odia: ${odia.join(', ') || '—'}<br>` +
                   `le teme a: ${teme.join(', ') || '—'}<br>aprendió: ${sabe.join(' · ') || 'todavía nada'}<br>` +
                   `se da cuenta de que lo miras: ${pct(m.conciencia)}%</div>`;

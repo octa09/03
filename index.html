@@ -131,6 +131,7 @@
       max-width: 340px;
     }
     .panel.mentes { top: 40px; left: 12px; }
+    body.sin-hud .panel, body.sin-hud .animo, body.sin-hud .ayuda { display: none; }
     .panel.recursos { top: 12px; right: 12px; text-align: right; }
     .panel b { font-weight: 600; }
     .panel .pj { margin-bottom: 7px; }
@@ -216,7 +217,7 @@
 
   <canvas id="pelota"></canvas>
 
-  <div class="ayuda">W A S D: mover · Espacio: saltar · Shift: correr · Arrastrar o flechas: cámara · Rueda: zoom · Clic en él: un golpe · Clic derecho en él: una caricia · Clic en una gallina: espantarla · 1 / 2: controlar al grande / al pequeño · I: ver lo que piensan · T: tiempo más rápido · Déjalos solos y hacen su vida</div>
+  <div class="ayuda">W A S D: mover · Espacio: saltar · Shift: correr · Arrastrar o flechas: cámara · Rueda: zoom · Clic en él: un golpe · Clic derecho en él: una caricia · Clic en una gallina: espantarla · 1 / 2: controlar al grande / al pequeño · I: ver lo que piensan · T: tiempo más rápido · 0: cámara libre (W A S D, Q / E) · H: ocultar las stats · Déjalos solos y hacen su vida</div>
   <div class="animo">curioso</div>
   <div class="panel mentes"></div>
   <div class="panel recursos"></div>
@@ -683,6 +684,7 @@
       habCocina: 0,          // práctica en el fogón (al principio se quema)
       negarse: 0,            // libre albedrío: a veces no te hace caso
       dormidoPiso: false, desmayo: false, llorando: false,
+      vistos: {},            // lo que ha visto (y cuándo): de ahí saca qué dibujar
     });
     let mente = menteNueva();
 
@@ -719,6 +721,11 @@
 
     function nuevaAccion() {
       if (yo.lleva) soltarLleva();   // si quedó con algo en la mano, se le cae
+      // aprende de todo: si lo que acaba de hacer lo dejó mejor o peor que antes, le dan más o menos ganas de repetirlo
+      const bien = bienestar();
+      if (mente.prevAccion && mente.prevBien !== undefined && !TAREAS[mente.prevAccion])
+        aprender(mente.prevAccion, limitar((bien - mente.prevBien) * 3, [-1, 1]), 0.12);
+      mente.prevAccion = null; mente.prevBien = bien;
       // lo que había quedado pendiente (celebrar, seguir tirando al aro, perseguir al otro...)
       const pendiente = mente.despues;
       mente.despues = null;
@@ -763,6 +770,7 @@
               : mente.molesto > 0 && Math.random() < 0.5 ? 'patear'      // enojado por los tiros: patea un cubo
               : elegirLibre(ganas);
       mente.ultimo = a;
+      if (!NO_CUENTA.includes(a)) mente.prevAccion = a;
       mente.recientes = [a, ...mente.recientes].slice(0, 3);
       // a veces va corriendo, sobre todo si está curioso
       mente.corre = Math.random() < ({ curioso: 0.35, tranquilo: 0.08, aburrido: 0.12, jugueton: 0.6 }[mente.animo] || 0);
@@ -984,7 +992,7 @@
       mente.animo = elegir(mente.animos);
       mente.tAnimo = azarEntre(15, 30);
       // (no deja botado lo que está haciendo en el patio ni cuando está tirado o durmiendo)
-      const ocupado = (mente.juego && TAREAS[mente.juego.tipo]) || mente.tirado > 0 || mente.acostado > 0;
+      const ocupado = (mente.juego && (TAREAS[mente.juego.tipo] || ['pintar', 'borrar'].includes(mente.juego.tipo))) || mente.tirado > 0 || mente.acostado > 0;
       if (antes !== mente.animo && mente.accion !== 'jugador' && !ocupado) nuevaAccion();
     }
 
@@ -1323,16 +1331,21 @@
       'KeyW', 'KeyA', 'KeyS', 'KeyD',                     // mover
       'ShiftLeft', 'ShiftRight',                          // correr
       'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',  // cámara
+      'KeyQ', 'KeyE',                                     // cámara libre: bajar / subir
     ];
+    // 0: cámara libre (se mueve igual que un personaje, pero no es nadie) · 1 / 2: volver a seguir a uno
+    let camLibre = false, camAltura = 177;
     document.addEventListener('keydown', e => {
       if (e.code === 'Space') {
         e.preventDefault();
-        if (!e.repeat) conPersonaje(CONTROL, () => { tomarControl(); brincar(); });
+        if (!e.repeat && !camLibre) conPersonaje(CONTROL, () => { tomarControl(); brincar(); });
         return;
       }
       // 1: controlar al grande · 2: controlar al pequeño
-      if (e.code === 'Digit1' || e.code === 'Numpad1') { CONTROL = PJS[0]; return; }
-      if (e.code === 'Digit2' || e.code === 'Numpad2') { CONTROL = PJS[1]; return; }
+      if (e.code === 'Digit1' || e.code === 'Numpad1') { CONTROL = PJS[0]; camLibre = false; tPanel = 0; return; }
+      if (e.code === 'Digit2' || e.code === 'Numpad2') { CONTROL = PJS[1]; camLibre = false; tPanel = 0; return; }
+      if (e.code === 'Digit0' || e.code === 'Numpad0') { camLibre = true; tPanel = 0; return; }
+      if (e.code === 'KeyH') { document.body.classList.toggle('sin-hud'); return; }    // ocultar / mostrar las stats
       if (e.code === 'KeyI') { verDetalle = !verDetalle; tPanel = 0; return; }        // ver lo que piensan
       if (e.code === 'KeyT') { VEL_TIEMPO = VEL_TIEMPO === 1 ? 3 : VEL_TIEMPO === 3 ? 6 : 1; tPanel = 0; return; }
       if (TECLAS_USADAS.includes(e.code)) {
@@ -1371,7 +1384,7 @@
         if (mente.nec.hambre > 0.92) { mente.aviso = 'me muero de hambre...'; mente.tAviso = 2; }
         if (mente.tAccion <= 0 || descansado || mente.nec.hambre > 0.92) mente.accion = 'levantarse';
       }
-      if (yo === CONTROL) {   // la cámara sigue al que controlas
+      if (yo === CONTROL && !camLibre) {   // la cámara sigue al que controlas
         camPos.x = suavizar(camPos.x, pos.x, SUAVIDAD_SEGUIR, dt);
         camPos.z = suavizar(camPos.z, pos.z, SUAVIDAD_SEGUIR, dt);
       }
@@ -1421,7 +1434,7 @@
         return;
       }
       let adelante = 0, derecha = 0;
-      const mio = yo === CONTROL;      // las teclas mueven solo al que estás controlando
+      const mio = yo === CONTROL && !camLibre;      // las teclas mueven solo al que estás controlando
       if (mio && teclas.has('KeyW')) adelante += 1;
       if (mio && teclas.has('KeyS')) adelante -= 1;
       if (mio && teclas.has('KeyD')) derecha  += 1;
@@ -1435,7 +1448,7 @@
           mente.negarse = agotado ? 3 : azarEntre(1.2, 2.6);
           const frases = agotado ? ['no puedo más...'] : ['¡no quiero!', 'hazlo tú', 'no me mandes', 'no tengo ganas'];
           mente.aviso = frases[Math.floor(Math.random() * frases.length)]; mente.tAviso = 1.8;
-          if (!agotado) { mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.05); golpe.vz += 80; }
+          if (!agotado) { mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.05); golpe.vz += 80; if (Math.random() < 0.3) hacerDedo('camara', ''); }
         }
       }
       if (mente.negarse > 0) adelante = derecha = 0;
@@ -1501,7 +1514,7 @@
       fuerzaPaso = suavizar(fuerzaPaso, rapidez > 30 && altura === 0 ? 1 : 0, 10, dt);
       desplazPaso = Math.sin(fasePaso) * PASO_MAX * (1 + corriendo) * fuerzaPaso;
 
-      if (yo === CONTROL) {   // la cámara sigue al que controlas
+      if (yo === CONTROL && !camLibre) {   // la cámara sigue al que controlas
         camPos.x = suavizar(camPos.x, pos.x, SUAVIDAD_SEGUIR, dt);
         camPos.z = suavizar(camPos.z, pos.z, SUAVIDAD_SEGUIR, dt);
       }
@@ -1586,6 +1599,26 @@
       if (mente.cansado > 0) return 'cansado';
       if (mente.susto > 0.5) return 'sorprendido';
       return mente.animo;
+    }
+
+    // Cámara libre: W A S D la mueven por el piso (según hacia dónde mira), Shift más rápido, Q / E baja y sube
+    function moverCamaraLibre(dt) {
+      if (!camLibre) return;
+      let adelante = 0, derecha = 0;
+      if (teclas.has('KeyW')) adelante += 1;
+      if (teclas.has('KeyS')) adelante -= 1;
+      if (teclas.has('KeyD')) derecha += 1;
+      if (teclas.has('KeyA')) derecha -= 1;
+      const v = 650 * (teclas.has('ShiftLeft') || teclas.has('ShiftRight') ? 2.2 : 1);
+      if (adelante || derecha) {
+        const l = Math.hypot(adelante, derecha), g = actual.giro * Math.PI / 180;
+        camPos.x += (Math.sin(g) * adelante + Math.cos(g) * derecha) / l * v * dt;
+        camPos.z += (-Math.cos(g) * adelante + Math.sin(g) * derecha) / l * v * dt;
+      }
+      if (teclas.has('KeyE')) camAltura += 400 * dt;
+      if (teclas.has('KeyQ')) camAltura -= 400 * dt;
+      camPos.x = limitar(camPos.x, [-2300, 2700]); camPos.z = limitar(camPos.z, [-1000, 1000]);
+      camAltura = limitar(camAltura, [20, 1100]);
     }
 
     function moverCamaraConFlechas(dt) {
@@ -1933,7 +1966,9 @@
         const [tx, ty, tz] = aplicar(m, [0, LATERAL_LARGO - 10, 0]);
         const h = -ty;
         const mano = [...caja(tx - 24, tx + 24, h - 20, h + 20, tz - 4, tz + 34, BLANCO),    // puño
-                      ...caja(tx - 12, tx + 12, h + 20, h + 78, tz + 5, tz + 27, BLANCO)];   // dedo
+                      ...caja(tx - 11, tx + 11, h + 20, h + 92, tz + 6, tz + 26, BLANCO)];   // dedo
+        // con borde negro: si no, el dedo blanco no se distingue delante del cuerpo blanco
+        for (const c of mano) { c.bordes = [true, true, true, true]; c.trazo = true; }
         caras.push(...mano);
       }
       colocar(caras, mCuerpo, 1, lista, null, 'brazo');
@@ -2060,6 +2095,7 @@
       // quieto mientras lo controlas: solo te mira si ya sabe que estás ahí
       if (mente.accion === 'jugador' && rapidez < 0.1 && reloj - ultimaOrden > 1.5 && mente.conciencia > 0.5) mirarA = 'camara';
       if (mente.susto > 0.5) mirarA = 'camara';
+      if (mente.dedo > 0) mirarA = mente.dedoA === 'otro' ? { pj: otroDe(yo) } : 'camara';   // mira a quien le saca el dedo
       const blanco = mirarA === 'camara' ? ojo
                    : mirarA === 'lampara' ? aLocal(CUARTOS[cuartoDe(pos.x)].luz)
                    : Array.isArray(mirarA) ? aLocal(mirarA)
@@ -2637,74 +2673,451 @@
       return null;
     }
 
-    // ---- Lo que se le ocurre dibujar ----
-    // Cada dibujo son partes; cada parte tiene un color ('cualquiera' = el que le guste) y trazos
-    // (listas de puntos x, y con y hacia arriba, en unidades de pared)
+    // =====================================================================
+    //  CREAR: dibujar y escribir lo que se les ocurre
+    //  Nada viene hecho: dibujan las cosas que vieron (copiando su forma de verdad),
+    //  lo que sienten (rayas que salen de cómo están), escenas con lo que les importa,
+    //  y escriben con las palabras que van aprendiendo. Con la práctica les sale mejor.
+    // =====================================================================
     const circulo = (cx, cy, r, n = 24, giro = 0) =>
       Array.from({ length: n + 1 }, (_, i) => { const a = giro + i / n * Math.PI * 2; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; });
-    const IDEAS = {
-      'un sol': () => [{ color: 'amarillo', trazos: [circulo(0, 0, 38),
-        ...Array.from({ length: 9 }, (_, i) => { const a = i / 9 * Math.PI * 2; return [[Math.cos(a) * 52, Math.sin(a) * 52], [Math.cos(a) * 80, Math.sin(a) * 80]]; })] }],
-      'una flor': () => {
-        const petalos = Array.from({ length: 6 }, (_, i) => { const a = i / 6 * Math.PI * 2; return circulo(Math.cos(a) * 28, 40 + Math.sin(a) * 28, 18, 14); });
-        return [{ color: 'verde', trazos: [[[0, 25], [4, -20], [0, -90]], [[2, -45], [32, -30], [40, -50], [6, -55]]] },
-                { color: 'cualquiera', trazos: [...petalos, circulo(0, 40, 9, 10)] }];
-      },
-      'una casa': () => [{ color: 'cualquiera', trazos: [[[-70, -90], [70, -90], [70, 10], [-70, 10], [-70, -90]],
-                                                        [[-85, 5], [0, 85], [85, 5]], [[-18, -90], [-18, -35], [18, -35], [18, -90]]] },
-                         { color: 'azul', trazos: [[[30, -20], [55, -20], [55, -2], [30, -2], [30, -20]]] }],
-      'una carita': () => [{ color: 'cualquiera', trazos: [circulo(0, 0, 70, 28), circulo(-25, 20, 6, 8), circulo(25, 20, 6, 8),
-                                                          Array.from({ length: 9 }, (_, i) => { const a = Math.PI * (1.15 + i / 8 * 0.7); return [Math.cos(a) * 40, -5 + Math.sin(a) * 40]; })] }],
-      'una estrella': () => [{ color: 'cualquiera', trazos: [Array.from({ length: 11 }, (_, i) => {
-        const a = Math.PI / 2 + i / 10 * Math.PI * 2, r = i % 2 ? 32 : 80; return [Math.cos(a) * r, Math.sin(a) * r]; })] }],
-      'un corazón': () => [{ color: 'rojo', trazos: [Array.from({ length: 41 }, (_, i) => {
-        const t = i / 40 * Math.PI * 2; return [16 * Math.sin(t) ** 3 * 4.5, (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * 4.5]; })] }],
-      'un espiral': () => [{ color: 'cualquiera', trazos: [Array.from({ length: 70 }, (_, i) => {
-        const a = i * 0.32, r = 3 + i * 1.15; return [Math.cos(a) * r, Math.sin(a) * r]; })] }],
-      'un árbol': () => [{ color: 'cafe', trazos: [[[-14, -100], [-10, 0]], [[14, -100], [10, 0]], [[-30, -100], [30, -100]]] },
-                         { color: 'verde', trazos: [circulo(0, 45, 55, 26), circulo(-25, 55, 22, 12), circulo(22, 30, 18, 12)] }],
-      'unas olas': () => [{ color: 'azul', trazos: [0, 1, 2].map(k => Array.from({ length: 30 }, (_, i) => [-100 + i * 7, -40 + k * 40 + Math.sin(i * 0.6 + k) * 14])) }],
-      'una nube': () => [{ color: 'azul', trazos: [[...circulo(-45, 0, 30, 10, Math.PI / 2).slice(0, 8), ...circulo(0, 18, 38, 12, Math.PI).slice(0, 8),
-                                                   ...circulo(45, 0, 30, 10, Math.PI * 1.4).slice(0, 8), [-45, -30]]] },
-                         { color: 'azul', trazos: [[[-30, -45], [-38, -70]], [[0, -45], [-8, -75]], [[30, -45], [22, -70]]] }],
-      'un monito': () => [{ color: 'cualquiera', trazos: [circulo(0, 60, 22, 14), [[0, 38], [0, -30]], [[-40, 10], [0, 20], [40, 10]],
-                                                         [[-30, -90], [0, -30], [30, -90]]] }],
-      'un autorretrato': () => [{ color: 'negro', trazos: [[[-45, -100], [45, -100], [45, -10], [-45, -10], [-45, -100]],
-        [[-35, -10], [-35, 90], [35, 90], [35, -10]], [[-40, 50], [40, 50]], circulo(-18, 30, 10, 8), circulo(18, 30, 10, 8),
-        [[-12, -55], [12, -40]], [[-12, -40], [12, -55]], [[0, 90], [6, 112], [-4, 120]]] }],
-      'su nombre: HOLA': () => [{ color: 'cualquiera', trazos: [
-        [[-110, -40], [-110, 40]], [[-80, -40], [-80, 40]], [[-110, 0], [-80, 0]],
-        circulo(-40, 0, 26, 16, Math.PI / 2),
-        [[0, 40], [0, -40], [35, -40]],
-        [[60, -40], [80, 40], [100, -40]], [[67, -10], [93, -10]]] }],
-      'un garabato': () => [{ color: 'cualquiera', trazos: [(() => {
-        let x = 0, y = 0, a = Math.random() * 6; const pts = [];
-        for (let i = 0; i < 45; i++) { a += azarEntre(-1.4, 1.4); x = limitar(x + Math.cos(a) * 14, [-90, 90]); y = limitar(y + Math.sin(a) * 14, [-80, 80]); pts.push([x, y]); }
-        return pts; })()] }],
-    };
     // tamaño (ancho) aproximado de una idea
     const anchoDe = partes => {
       const xs = partes.flatMap(p => p.trazos.flat().map(q => q[0]));
-      return Math.max(...xs) - Math.min(...xs) + 30;
+      return xs.length ? Math.max(...xs) - Math.min(...xs) + 30 : 60;
     };
 
-    // Elige qué dibujar (con preferencia por lo que no ha dibujado hace poco)
-    function idearDibujo() {
-      const nombres = Object.keys(IDEAS);
-      const pesos = Object.fromEntries(nombres.map(n => [n, (mente.dibujados || []).includes(n) ? 0.25 : 1]));
-      const nombre = elegir(pesos);
-      mente.dibujados = [nombre, ...(mente.dibujados || [])].slice(0, 4);
-      const partes = IDEAS[nombre]();
-      // escala y un poquito de inclinación: nunca le sale igual
-      const esc = azarEntre(1.2, 1.7) * (yo.escala < 1 ? 0.75 : 1), incl = azarEntre(-0.12, 0.12);
-      const favorito = Object.keys(COLORES_PLUMON)[Math.floor(Math.random() * 7)];
-      for (const p of partes) {
-        if (p.color === 'cualquiera') p.color = favorito;
-        p.trazos = p.trazos.map(t => t.map(([x, y]) => [
-          (x * Math.cos(incl) - y * Math.sin(incl)) * esc + azarEntre(-2, 2),
-          (x * Math.sin(incl) + y * Math.cos(incl)) * esc + azarEntre(-2, 2)]));
+    // ---- Las cosas de la casa que pueden ver (y después dibujar) ----
+    // (se arma la primera vez que se usa: algunas cosas del patio se definen más abajo)
+    let NOMBRADOS_ = null;
+    const nombrados = () => NOMBRADOS_ || (NOMBRADOS_ = [
+      ['la cama', 1, [1250, 1696, -690, -380]], ['el aro', 0, [ARO.x - 125, ARO.x + 125, -700, ARO.z + 60]],
+      ['la mesita', 0, [MESITA.x0, MESITA.x1, MESITA.z0, MESITA.z1]], ['la camita', 2, [2110, 2396, 130, 350]],
+      ['el baúl', 2, [1876, 2024, 104, 194]], ['la repisa', 2, [1730, 1850, 104, 150]], ['el puf', 2, [2160, 2240, 580, 660]],
+      ['el gallinero', PATIO, [-1885, -1715, -665, -515]], ['el nido', PATIO, [NIDO.x0, NIDO.x1, NIDO.z0, NIDO.z1]],
+      ['el saco', PATIO, [SACO.x0 - 4, SACO.x1 + 4, SACO.z0 - 4, SACO.z1 + 4]], ['la llave', PATIO, [LLAVE_X - 14, LLAVE_X + 14, -700, -660]],
+      ['el fogón', PATIO, [FOGON.x - 55, FOGON.x + 55, FOGON.z - 55, FOGON.z + 55]],
+      ['la canasta', PATIO, [CANASTA.x0 - 3, CANASTA.x1 + 3, CANASTA.z0 - 3, CANASTA.z1 + 3]],
+    ].map(([nombre, cuarto, r]) => ({ nombre, cuarto, r, x: (r[0] + r[1]) / 2, z: (r[2] + r[3]) / 2, caras: null })));
+    // sus caras salen de los muebles de verdad (las que caen dentro de su rectángulo)
+    function carasDe(n) {
+      if (!n.caras) n.caras = MUEBLES.filter(m => m.cuarto === n.cuarto).flatMap(m => m.caras)
+        .filter(c => c.centro[0] >= n.r[0] - 1 && c.centro[0] <= n.r[1] + 1 && c.centro[2] >= n.r[2] - 1 && c.centro[2] <= n.r[3] + 1)
+        .map(c => ({ ...c, esquinas: c.esquinas.map(([x, y, z]) => [x - n.x, y, z - n.z]) }));
+      return n.caras;
+    }
+
+    // ---- Mirar alrededor: recuerda lo que ve (y cuántas veces lo ha visto) ----
+    function mirarAlrededor() {
+      const r = cuartoDe(pos.x), fx = Math.sin(orientacion), fz = Math.cos(orientacion);
+      const ver = (clave, tipo, ref, x, z) => {
+        if (cuartoDe(x) !== r) return;
+        const dx = x - pos.x, dz = z - pos.z, d = Math.hypot(dx, dz);
+        if (d > 1100 || (d > 160 && (dx * fx + dz * fz) / d < -0.3)) return;   // lo que tiene detrás no lo ve
+        const v = mente.vistos[clave] || (mente.vistos[clave] = { veces: 0 });
+        Object.assign(v, { t: reloj, tipo, ref }); v.veces++;
+      };
+      for (const g of GALLINAS) if (g.estado !== 'mano') ver(g.nombre, g.estado === 'muerta' ? 'gallinaMuerta' : 'gallina', g, g.x, g.z);
+      const c = CUBOS.filter(c => c.estado === 'suelo').sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z))[0];
+      if (c) ver('los cubos', 'cubo', c, c.x, c.z);
+      const o = otroDe(yo);
+      ver('el otro', 'pj', o, o.pos.x, o.pos.z);
+      for (const n of nombrados()) ver(n.nombre, 'mueble', n, n.x, n.z);
+      const p = PLANTAS[Math.floor(Math.random() * PLANTAS.length)];
+      ver('el maíz', 'planta', p, p.x, p.z);
+      if (r === PATIO) ver('el sol', 'sol', null, pos.x, pos.z);
+      else ver('la lámpara', 'lampara', null, pos.x, pos.z);
+      const huevos = RECURSOS.nido.length + RECURSOS.canasta.length;
+      if (huevos) ver('los huevos', 'huevo', huevos, NIDO.x0, NIDO.z0);
+    }
+
+    // ---- Los plumones: el color de verdad de una cosa → el plumón más parecido ----
+    const PLUMON_RGB = Object.entries(COLORES_PLUMON).map(([k, v]) => [k, aRGB(v)]);
+    function plumonPara(rgb) {
+      if (0.3 * rgb[0] + 0.59 * rgb[1] + 0.11 * rgb[2] > 205) return 'negro';   // lo blanco se dibuja con negro
+      if (Math.max(...rgb) - Math.min(...rgb) < 35) return 'negro';                 // lo gris también
+      let mejor = 'negro', dMin = Infinity;
+      for (const [k, c] of PLUMON_RGB) { const d = (c[0] - rgb[0]) ** 2 + (c[1] - rgb[1]) ** 2 + (c[2] - rgb[2]) ** 2; if (d < dMin) { dMin = d; mejor = k; } }
+      return mejor;
+    }
+    // cada uno asocia sus propios colores a lo que siente (lo decide la primera vez y le queda)
+    function colorDe(emocion) {
+      mente.colorEmo = mente.colorEmo || {};
+      if (!mente.colorEmo[emocion]) {
+        const usados = Object.values(mente.colorEmo), libres = Object.keys(COLORES_PLUMON).filter(k => !usados.includes(k));
+        mente.colorEmo[emocion] = libres[Math.floor(Math.random() * libres.length)] || 'negro';
       }
-      return { nombre, partes };
+      return mente.colorEmo[emocion];
+    }
+
+    // ---- Copiar la forma de algo: proyecta sus caras de verdad sobre el papel ----
+    // vista: 'frente' (ve el frente), 'lado' (ve el costado derecho) u 'oblicua' (frente, arriba y costado, como en 3D)
+    function bocetoDeCaras(caras, vista, conMarcas) {
+      const proy = vista === 'frente' ? ([x, y]) => [x, -y]
+                 : vista === 'lado' ? ([x, y, z]) => [z, -y]
+                 : ([x, y, z]) => [x - z * 0.42, -y - z * 0.3];
+      const ve = n => vista === 'frente' ? n[2] > 0.5 : vista === 'lado' ? n[0] > 0.5 : (n[2] > 0.5 || n[1] < -0.5 || n[0] > 0.5);
+      const polis = [], marcas = [];
+      for (const c of caras) {
+        if (!ve(c.normal)) continue;
+        const pts = c.esquinas.map(proy);
+        let area = 0;
+        for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; area += a[0] * b[1] - b[0] * a[1]; }
+        if (Math.abs(area) < 4) continue;
+        polis.push({ pts: [...pts, pts[0]], color: plumonPara(c.rgb), area: Math.abs(area) / 2 });
+        if (conMarcas && c.marcas) for (const m of c.marcas) {
+          const l = (Array.isArray(m) ? m : m.pts).map(proy);
+          if (!Array.isArray(m) && m.grosor > 4) marcas.push(circulo(l[0][0], l[0][1], 3, 6)); else marcas.push(l);
+        }
+      }
+      return { polis, marcas };
+    }
+    // Lo deja del tamaño pedido, centrado, con los colores que alcanza a usar y (si sabe poco) más simple
+    function armarBoceto({ polis, marcas }, tam, extra = []) {
+      const hab = mente.habDibujo || 0;
+      polis.sort((a, b) => b.area - a.area);
+      polis.splice(Math.max(3, 4 + Math.floor(hab * 34) - (yo.escala < 0.8 ? 2 : 0)));   // con poca práctica dibuja solo lo grande
+      const todos = [...polis.flatMap(p => p.pts), ...marcas.flat()];
+      if (!todos.length) return [];
+      const xs = todos.map(p => p[0]), ys = todos.map(p => p[1]);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      const k = tam / Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1);
+      // proporciones torcidas cuando recién aprende
+      const kx = k * (1 + (Math.random() - 0.5) * 0.5 * (1 - hab)), ky = k * (1 + (Math.random() - 0.5) * 0.5 * (1 - hab));
+      const T = p => [(p[0] - cx) * kx, (p[1] - cy) * ky];
+      // a lo más 3 colores: los que más se usan; lo demás, con negro
+      const usoColor = {};
+      for (const p of polis) usoColor[p.color] = (usoColor[p.color] || 0) + p.area;
+      const colores = Object.keys(usoColor).sort((a, b) => usoColor[b] - usoColor[a]).slice(0, 2 + (hab > 0.5 ? 1 : 0));
+      const partes = {};
+      const poner = (color, trazo) => (partes[color] = partes[color] || []).push(trazo);
+      for (const p of polis) poner(colores.includes(p.color) ? p.color : 'negro', p.pts.map(T));
+      for (const m of marcas) poner('negro', m.map(T));
+      for (const [color, t] of extra) poner(color, t);
+      return Object.entries(partes).map(([color, trazos]) => ({ color, trazos })).sort((a, b) => (a.color === 'negro') - (b.color === 'negro'));
+    }
+    // El cuerpo de uno de ellos (lo conocen bien): de frente, con su cara, y los brazos como dos rayas
+    function carasPersonaje() {
+      const caras = [...GRUPOS.cuerpo[0], ...GRUPOS.cabeza.flat(), ...GRUPOS.pieIzq[0], ...GRUPOS.pieDer[0]];
+      const brazos = [-1, 1].map(s => {
+        const x0 = s * LADO / 2, y0 = LATERAL_ORIGEN_Y, a = LATERAL_ANGULO * Math.PI / 180;
+        return [[x0, y0], [s * (LATERAL_ORIGEN_X + Math.sin(a) * LATERAL_LARGO), y0 - Math.cos(a) * LATERAL_LARGO]];
+      });
+      return { caras, brazos };
+    }
+    // Lo que copia de cada tipo de cosa
+    function bocetoDe(v, tam) {
+      switch (v.tipo) {
+        case 'gallina': case 'gallinaMuerta': {
+          const g = v.ref, m = modeloGallina(g.plumaje, g.edad < 0.6);
+          const b = bocetoDeCaras([...m.cuerpo, ...m.cabeza], 'lado');
+          if (v.tipo === 'gallinaMuerta') for (const p of b.polis) p.pts = p.pts.map(([x, y]) => [-y, x]);   // patas para arriba
+          return armarBoceto(b, tam * escalaGallina(g));
+        }
+        case 'pj': {
+          const { caras, brazos } = carasPersonaje(), b = bocetoDeCaras(caras, 'frente', true);
+          b.marcas.push(...brazos);
+          return armarBoceto(b, tam * (v.ref.escala < 0.8 ? 0.75 : 1));
+        }
+        case 'cubo': {
+          const pila = Math.min(3, 1 + Math.floor(Math.random() * 3)), caras = [];
+          for (let i = 0; i < pila; i++) caras.push(...caja(-25 + i * 8, 25 + i * 8, i * 50, 50 + i * 50, -25, 25, CUBOS[Math.floor(Math.random() * CUBOS.length)]?.color || v.ref.color));
+          return armarBoceto(bocetoDeCaras(caras, 'oblicua'), tam * 0.6);
+        }
+        case 'mueble': return armarBoceto(bocetoDeCaras(carasDe(v.ref), 'oblicua'), tam);
+        case 'planta': return armarBoceto(bocetoDeCaras(carasPlanta(v.ref).map(c => ({ ...c, esquinas: c.esquinas.map(([x, y, z]) => [x - v.ref.x, y, z - v.ref.z]) })), 'frente'), tam);
+        case 'sol': case 'lampara': {
+          // una luz: un círculo, y si brilla mucho (el sol), los rayos que le salen
+          const r = tam * 0.28, n = 7 + Math.floor(Math.random() * 6), t = [[colorDe('luz') === 'negro' ? 'amarillo' : 'amarillo', circulo(0, 0, r, 22)]];
+          if (v.tipo === 'sol') for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + Math.random() * 0.3; t.push(['amarillo', [[Math.cos(a) * r * 1.3, Math.sin(a) * r * 1.3], [Math.cos(a) * r * (1.8 + Math.random() * 0.5), Math.sin(a) * r * (1.8 + Math.random() * 0.5)]]]); }
+          else t.push(['negro', [[0, r], [0, r * 2.2]]]);
+          return armarBoceto({ polis: [], marcas: [] }, tam, t);
+        }
+        case 'huevo': {
+          const n = Math.min(5, v.ref || 1), t = [];
+          for (let i = 0; i < n; i++) { const x = (i - (n - 1) / 2) * tam * 0.22; t.push(['negro', Array.from({ length: 19 }, (_, k) => { const a = k / 18 * Math.PI * 2; return [x + Math.cos(a) * tam * 0.08, Math.sin(a) * tam * (Math.sin(a) > 0 ? 0.13 : 0.1)]; })]); }
+          return armarBoceto({ polis: [], marcas: [] }, tam, t);
+        }
+      }
+      return [];
+    }
+
+    // ---- Lo que siente, hecho rayas: nadie le dice cómo, sale de cómo está ----
+    // feliz: curvas suaves que suben y se enroscan · enojado: zigzags grandes y bruscos ·
+    // con miedo: rayitas chicas y temblorosas · triste: líneas que caen · tranquilo: ondas suaves
+    function trazosDeSentir(tam, zona) {
+      const e = mente.emo, total = e.alegria + e.enojo + e.miedo + e.tristeza, calma = Math.max(0, 0.35 - total);
+      const w = { alegria: e.alegria, enojo: e.enojo, miedo: e.miedo, tristeza: e.tristeza, calma }, suma = total + calma || 1;
+      const mezcla = (a, b, c, d, f) => (w.alegria * a + w.enojo * b + w.miedo * c + w.tristeza * d + w.calma * f) / suma;
+      const curva = mezcla(0.32, 0, 0, 0.02, 0.08), azar = mezcla(0.25, 1.9, 1, 0.15, 0.2), zig = mezcla(0, 1.2, 0.2, 0, 0);
+      const paso = mezcla(13, 22, 6, 12, 14) * tam / 220, sube = mezcla(0.45, 0, 0.05, -0.65, 0);
+      const n = 2 + Math.round(Math.min(1, total) * 6), out = [];
+      const emos = Object.entries(w).filter(([, v]) => v > 0.05);
+      for (let k = 0; k < n; k++) {
+        let [x, y] = zona ? [zona[0] + Math.random() * (zona[1] - zona[0]), zona[2] + Math.random() * (zona[3] - zona[2])]
+                          : [(Math.random() - 0.5) * tam * 0.8, (Math.random() - 0.5) * tam * 0.6];
+        let a = Math.random() * Math.PI * 2, signo = 1;
+        const pts = [[x, y]], largo = 18 + Math.floor(Math.random() * 30);
+        for (let i = 0; i < largo; i++) {
+          signo = -signo;
+          a += curva + (Math.random() - 0.5) * azar + signo * zig;
+          x += Math.cos(a) * paso; y += Math.sin(a) * paso + sube * paso;
+          x = limitar(x, [-tam * 0.8, tam * 0.8]); y = limitar(y, [-tam * 0.6, tam * 0.6]);
+          pts.push([x, y]);
+        }
+        // el color: el que asocia a la emoción que más pesa en esa raya
+        let r = Math.random() * emos.reduce((s, [, v]) => s + v, 0), emo = emos[0][0];
+        for (const [k2, v] of emos) { r -= v; if (r <= 0) { emo = k2; break; } }
+        out.push([colorDe(emo), pts]);
+      }
+      return out;
+    }
+    // tachar algo que odia: un garabato encima · rodear algo que quiere: rayitas alrededor
+    function tachado(caja2d) {
+      const [x0, x1, y0, y1] = caja2d, pts = [];
+      for (let i = 0; i < 9; i++) pts.push([x0 + (x1 - x0) * Math.random(), i % 2 ? y0 + (y1 - y0) * 0.1 : y1 - (y1 - y0) * 0.1]);
+      return [[colorDe('enojo'), pts], [colorDe('enojo'), [[x0, y0], [x1, y1]]], [colorDe('enojo'), [[x0, y1], [x1, y0]]]];
+    }
+    function rodeado(caja2d) {
+      const [x0, x1, y0, y1] = caja2d, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, r = Math.max(x1 - x0, y1 - y0) * 0.62, out = [];
+      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 + Math.random() * 0.4; out.push([colorDe('alegria'), [[cx + Math.cos(a) * r, cy + Math.sin(a) * r], [cx + Math.cos(a) * r * 1.25, cy + Math.sin(a) * r * 1.25]]]); }
+      return out;
+    }
+    const cajaDe = partes => {
+      const ps = partes.flatMap(p => p.trazos.flat());
+      if (!ps.length) return [-50, 50, -50, 50];
+      const xs = ps.map(p => p[0]), ys = ps.map(p => p[1]);
+      return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    };
+    const moverPartes = (partes, dx, dy) => partes.map(p => ({ color: p.color, trazos: p.trazos.map(t => t.map(([x, y]) => [x + dx, y + dy])) }));
+    const juntar = (...listas) => {
+      const por = {};
+      for (const l of listas) for (const p of l) (por[p.color] = por[p.color] || []).push(...p.trazos);
+      return Object.entries(por).map(([color, trazos]) => ({ color, trazos })).sort((a, b) => (a.color === 'negro') - (b.color === 'negro'));
+    };
+    const aPartes = lista => juntar(lista.map(([color, t]) => ({ color, trazos: [t] })));
+
+    // ---- Escribir: con las palabras que conoce (y las que aprende leyendo o viviendo) ----
+    const sinTilde = t => t.toUpperCase().replace(/[ÁÀ]/g, 'A').replace(/[ÉÈ]/g, 'E').replace(/[ÍÌ]/g, 'I').replace(/[ÓÒ]/g, 'O').replace(/[ÚÙÜ]/g, 'U');
+    const palabraDe = cosaClave => {   // 'el maíz' → 'MAIZ', 'los huevos crudos' → 'HUEVOS', 'el otro' → su nombre
+      if (cosaClave === 'el otro') return sinTilde(otroDe(yo).nombre);
+      if (cosaClave === 'la cámara') return 'OJO';
+      const w = cosaClave.split(' ').filter(p => !['el', 'la', 'los', 'las', 'su', 'sus', 'un', 'una'].includes(p));
+      return w.length ? sinTilde(w[0]) : null;
+    };
+    function aprenderPalabra(p) {
+      if (!p) return;
+      mente.palabras = mente.palabras || new Set();
+      mente.palabras.add(sinTilde(p));
+    }
+    const sabe = p => mente.palabras && mente.palabras.has(p);
+    // Lo que quiere decir sale de lo que tiene adentro (lo más fuerte primero); solo escribe las palabras que sabe
+    function idearTexto() {
+      const e = mente.emo, n = mente.nec, ideas = [];
+      const cosas = Object.entries(mente.cosas).filter(([k]) => palabraDe(k));
+      const ama = cosas.sort((a, b) => b[1] - a[1])[0], odia = [...cosas].sort((a, b) => a[1] - b[1])[0];
+      const otro = sinTilde(otroDe(yo).nombre);
+      if (n.hambre > 0.55) ideas.push([n.hambre, ['TENGO', 'HAMBRE']]);
+      if (n.sueno > 0.6) ideas.push([n.sueno * 0.8, ['TENGO', 'SUEÑO']]);
+      if (e.alegria > 0.3) ideas.push([e.alegria, ['ESTOY', 'FELIZ']]);
+      if (e.tristeza > 0.3) ideas.push([e.tristeza, ['ESTOY', 'TRISTE']]);
+      if (e.enojo > 0.3) ideas.push([e.enojo, ['ESTOY', 'ENOJADO']]);
+      if (e.miedo > 0.3) ideas.push([e.miedo, ['TENGO', 'MIEDO']]);
+      if (mente.rencor.camara > 0.25 && mente.conciencia > 0.3) ideas.push([mente.rencor.camara * 1.3, Math.random() < 0.5 ? ['TE', 'ODIO'] : ['TU', 'ERES', 'MALO']]);
+      if (mente.rencor.otro > 0.25) ideas.push([mente.rencor.otro * 1.2, ['ODIO', 'AL', otro]]);
+      if (ama && ama[1] > 0.25) ideas.push([ama[1], ['ME', 'GUSTA', palabraDe(ama[0])]]);
+      if (odia && odia[1] < -0.25) ideas.push([-odia[1], ['ODIO', palabraDe(odia[0])]]);
+      if (RELACION.v > 0.5) ideas.push([RELACION.v * 0.6, [otro, 'ES', 'MI', 'AMIGO']]);
+      for (const nom of mente.perdidas || []) ideas.push([0.5, ['ADIOS', sinTilde(nom)]]);
+      const visto = Object.entries(mente.vistos || {}).sort((a, b) => b[1].t - a[1].t)[0];
+      if (visto) ideas.push([0.25, [palabraDe(visto[0])]]);
+      ideas.push([0.2, ['YO', 'SOY', sinTilde(yo.nombre)]]);
+      ideas.push([0.15, ['HOLA']]);
+      // prefiere decir lo que sabe escribir; elige una (con algo de azar) y se queda con las palabras que sabe
+      for (const i of ideas) i[0] *= 0.1 + i[1].filter(p => p && sabe(p)).length / i[1].length;
+      let total = ideas.reduce((s, [w]) => s + w, 0), r = Math.random() * total, elegida = ideas[0][1];
+      for (const [w, frase] of ideas) { r -= w; if (r <= 0) { elegida = frase; break; } }
+      let palabras = elegida.filter(p => p && sabe(p));
+      // si no sabe casi nada, inventa una palabra con las letras que ha visto
+      if (!palabras.length) {
+        const letras = [...(mente.palabras || [])].join('') || sinTilde(yo.nombre);
+        const largo = 2 + Math.floor(Math.random() * 3);
+        palabras = [Array.from({ length: largo }, () => letras[Math.floor(Math.random() * letras.length)]).join('')];
+      }
+      return palabras.join(' ');
+    }
+    // Se equivoca escribiendo cuando sabe poco: se come letras, las repite, las cambia o las da vuelta
+    const PARECIDAS = { B: 'V', V: 'B', C: 'S', S: 'C', K: 'C', G: 'J', J: 'G', Y: 'I', I: 'Y', Z: 'S', LL: 'Y' };
+    function conErrores(texto) {
+      const hab = mente.habEscribir || 0, p = (1 - hab) * (yo.escala < 0.8 ? 0.22 : 0.08);
+      const out = [];
+      for (let i = 0; i < texto.length; i++) {
+        const c = texto[i];
+        if (c === ' ' || Math.random() > p) { out.push({ c, espejo: false }); continue; }
+        const r = Math.random();
+        if (r < 0.25) continue;                                                      // se la come
+        if (r < 0.45) { out.push({ c, espejo: false }, { c, espejo: false }); continue; }   // la repite
+        if (r < 0.7 && PARECIDAS[c]) { out.push({ c: PARECIDAS[c], espejo: false }); continue; }   // la confunde
+        out.push({ c, espejo: true });                                               // la escribe al revés
+      }
+      return out;
+    }
+    // Letras de un solo trazo (en una grilla de 4 de ancho y 6 de alto)
+    const LETRAS = {
+      A: [[[0, 0], [2, 6], [4, 0]], [[1, 3], [3, 3]]], B: [[[0, 0], [0, 6], [3, 6], [4, 5], [3, 3], [0, 3]], [[3, 3], [4, 2], [4, 1], [3, 0], [0, 0]]],
+      C: [[[4, 5], [3, 6], [1, 6], [0, 5], [0, 1], [1, 0], [3, 0], [4, 1]]], D: [[[0, 0], [0, 6], [2, 6], [4, 4], [4, 2], [2, 0], [0, 0]]],
+      E: [[[4, 6], [0, 6], [0, 0], [4, 0]], [[0, 3], [3, 3]]], F: [[[4, 6], [0, 6], [0, 0]], [[0, 3], [3, 3]]],
+      G: [[[4, 5], [3, 6], [1, 6], [0, 5], [0, 1], [1, 0], [3, 0], [4, 1], [4, 3], [2, 3]]], H: [[[0, 0], [0, 6]], [[4, 0], [4, 6]], [[0, 3], [4, 3]]],
+      I: [[[2, 0], [2, 6]], [[1, 6], [3, 6]], [[1, 0], [3, 0]]], J: [[[4, 6], [4, 1], [3, 0], [1, 0], [0, 1]]],
+      K: [[[0, 0], [0, 6]], [[4, 6], [0, 2]], [[1, 3], [4, 0]]], L: [[[0, 6], [0, 0], [4, 0]]], M: [[[0, 0], [0, 6], [2, 3], [4, 6], [4, 0]]],
+      N: [[[0, 0], [0, 6], [4, 0], [4, 6]]], Ñ: [[[0, 0], [0, 6], [4, 0], [4, 6]], [[0, 7], [1, 7.6], [3, 7], [4, 7.6]]],
+      O: [[[1, 0], [0, 1], [0, 5], [1, 6], [3, 6], [4, 5], [4, 1], [3, 0], [1, 0]]], P: [[[0, 0], [0, 6], [3, 6], [4, 5], [4, 4], [3, 3], [0, 3]]],
+      Q: [[[1, 0], [0, 1], [0, 5], [1, 6], [3, 6], [4, 5], [4, 1], [3, 0], [1, 0]], [[2, 2], [4, 0]]],
+      R: [[[0, 0], [0, 6], [3, 6], [4, 5], [4, 4], [3, 3], [0, 3]], [[2, 3], [4, 0]]],
+      S: [[[4, 5], [3, 6], [1, 6], [0, 5], [0, 4], [1, 3], [3, 3], [4, 2], [4, 1], [3, 0], [1, 0], [0, 1]]],
+      T: [[[0, 6], [4, 6]], [[2, 6], [2, 0]]], U: [[[0, 6], [0, 1], [1, 0], [3, 0], [4, 1], [4, 6]]], V: [[[0, 6], [2, 0], [4, 6]]],
+      W: [[[0, 6], [1, 0], [2, 4], [3, 0], [4, 6]]], X: [[[0, 0], [4, 6]], [[0, 6], [4, 0]]], Y: [[[0, 6], [2, 3], [4, 6]], [[2, 3], [2, 0]]],
+      Z: [[[0, 6], [4, 6], [0, 0], [4, 0]]], '!': [[[2, 6], [2, 2]], [[2, 0.4], [2, 0]]],
+    };
+    function trazosDeTexto(texto) {
+      const hab = mente.habEscribir || 0, chico = yo.escala < 0.8;
+      const s = chico ? 8.5 : 6.5, tiembla = (1 - hab) * (chico ? 0.5 : 0.25);
+      const letras = conErrores(texto);
+      // corta en líneas de hasta 9 letras (sin partir palabras)
+      const palabras = [[]];
+      for (const l of letras) { if (l.c === ' ') palabras.push([]); else palabras[palabras.length - 1].push(l); }
+      const lineas = [[]];
+      for (const p of palabras) {
+        if (!p.length) continue;
+        const actual = lineas[lineas.length - 1];
+        if (actual.length && actual.length + 1 + p.length > 9) lineas.push([...p]);
+        else { if (actual.length) actual.push({ c: ' ' }); actual.push(...p); }
+      }
+      const out = [], alto = 6 * s * 1.7;
+      lineas.forEach((linea, li) => {
+        const ancho = linea.length * 6 * s, y0 = (lineas.length - 1) / 2 * alto - li * alto;
+        linea.forEach((l, i) => {
+          const forma = LETRAS[l.c];
+          if (!forma) return;
+          const x0 = -ancho / 2 + i * 6 * s, giro = (Math.random() - 0.5) * tiembla * 0.5, dy = (Math.random() - 0.5) * tiembla * s * 2;
+          const tam = 1 + (Math.random() - 0.5) * tiembla * 0.6;
+          for (const t of forma) out.push(t.map(([x, y]) => {
+            const xx = (l.espejo ? 4 - x : x) - 2, yy = y - 3;
+            return [x0 + 2 * s + (xx * Math.cos(giro) - yy * Math.sin(giro)) * s * tam, y0 + dy + (xx * Math.sin(giro) + yy * Math.cos(giro)) * s * tam];
+          }));
+        });
+      });
+      return out;
+    }
+
+    // ---- La mano: los trazos tiemblan según la práctica y el miedo ----
+    function aMano(partes) {
+      const hab = mente.habDibujo || 0;
+      const temblor = 0.6 + (1 - hab) * 3.5 + mente.emo.miedo * 4 + (yo.escala < 0.8 ? 1.2 : 0);
+      const incl = (Math.random() - 0.5) * 0.2 * (1.2 - hab);
+      return partes.map(p => ({ color: p.color, trazos: p.trazos.map(t => {
+        const out = [];
+        let off = 0;
+        for (let i = 0; i < t.length; i++) {
+          const a = t[i], b = t[i + 1];
+          if (!b) { out.push(a); break; }
+          const d = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(d / 14));
+          const nx = -(b[1] - a[1]) / (d || 1), ny = (b[0] - a[0]) / (d || 1);
+          for (let k = 0; k < n; k++) {
+            off = off * 0.6 + (Math.random() - 0.5) * temblor;
+            const f = k / n;
+            out.push([a[0] + (b[0] - a[0]) * f + nx * off, a[1] + (b[1] - a[1]) * f + ny * off]);
+          }
+        }
+        return out.map(([x, y]) => [x * Math.cos(incl) - y * Math.sin(incl), x * Math.sin(incl) + y * Math.cos(incl)]);
+      }) }));
+    }
+
+    // ---- Qué se le ocurre hacer: mirar algo, lo que siente, una escena, escribir, o dibujarse ----
+    function elegirTemas(cuantos) {
+      const cands = [];
+      for (const [k, v] of Object.entries(mente.vistos || {})) {
+        const reciente = Math.exp(-(reloj - v.t) / 150);
+        if (reciente < 0.04) continue;
+        const siente = Math.abs(cosaV(k));
+        cands.push([k, v, reciente * (0.4 + Math.min(v.veces, 30) / 30) * (0.4 + 2.5 * siente) / (1 + 2 * (mente.dibujados || []).filter(d => d === k).length)]);   // lo que ya dibujó hace poco, menos
+      }
+      const out = [];
+      while (out.length < cuantos && cands.length) {
+        let r = Math.random() * cands.reduce((s, c) => s + c[2], 0), i = 0;
+        for (; i < cands.length - 1; i++) { r -= cands[i][2]; if (r <= 0) break; }
+        out.push(cands.splice(i, 1)[0]);
+      }
+      return out;
+    }
+    function idearDibujo() {
+      mente.estilos = mente.estilos || { mirar: 1, sentir: 0.8, escena: 0.6, escribir: yo.escala < 0.8 ? 0.4 : 0.8, yo: 0.3 };
+      const e = mente.emo, intenso = Math.max(e.alegria, e.enojo, e.miedo, e.tristeza);
+      const temas = elegirTemas(3);
+      const pesos = { ...mente.estilos };
+      pesos.sentir *= 0.4 + intenso * 2.5;
+      pesos.escribir *= Math.min(1.5, (mente.palabras ? mente.palabras.size : 0) / 12) * (0.5 + intenso);
+      if (!temas.length) { pesos.mirar = 0; pesos.escena = 0; }
+      if (temas.length < 2) pesos.escena = 0;
+      let estilo = elegir(pesos);
+      const tam = (yo.escala < 0.8 ? 170 : 210) * azarEntre(0.85, 1.15);
+      let partes = [], nombre = 'algo', sobre = null, texto = null, contra = null;
+      const conSentimiento = (clave, ps) => {   // si lo quiere lo rodea de rayitas; si lo odia lo tacha
+        const v = cosaV(clave), c = cajaDe(ps);
+        if (v < -0.35) { if (clave === 'el otro') contra = otroDe(yo); return juntar(ps, aPartes(tachado(c))); }
+        if (v > 0.35) return juntar(ps, aPartes(rodeado(c)));
+        return ps;
+      };
+      if (estilo === 'mirar') {
+        const [k, v] = temas[0];
+        partes = conSentimiento(k, bocetoDe(v, tam));
+        // con práctica aprende a ponerle un piso
+        if ((mente.habDibujo || 0) > 0.3 && v.tipo !== 'sol' && v.tipo !== 'lampara') {
+          const c = cajaDe(partes);
+          partes = juntar(partes, aPartes([[v.tipo === 'gallina' || v.tipo === 'planta' ? 'verde' : 'cafe', [[c[0] - 30, c[2] - 6], [c[1] + 30, c[2] - 6]]]]));
+        }
+        nombre = k === 'el otro' ? `al ${otroDe(yo).nombre}` : NOMBRES_GALLINA.includes(k) ? `a ${k}` : k; sobre = k;
+      } else if (estilo === 'escena') {
+        // dos o tres cosas que vio, una al lado de la otra; lo que más le importa, más grande
+        const piezas = temas.map(([k, v]) => conSentimiento(k, bocetoDe(v, tam * (0.55 + 0.4 * Math.min(1, Math.abs(cosaV(k)) + 0.3)))));
+        let x = 0;
+        const puestas = piezas.map(ps => { const c = cajaDe(ps), w = c[1] - c[0], m = moverPartes(ps, x - c[0], -c[2] - tam * 0.4); x += w + 25; return m; });
+        partes = moverPartes(juntar(...puestas), -x / 2, 0);
+        if (intenso > 0.35) partes = juntar(partes, aPartes(trazosDeSentir(tam * 0.5, [-x / 2, x / 2, tam * 0.3, tam * 0.55])));
+        nombre = temas.map(([k]) => k === 'el otro' ? `el ${otroDe(yo).nombre}` : k).join(' y '); sobre = temas.find(([k]) => Math.abs(cosaV(k)) > 0.35)?.[0] || null;
+      } else if (estilo === 'yo') {
+        const { caras, brazos } = carasPersonaje(), b = bocetoDeCaras(caras, 'frente', true);
+        b.marcas.push(...brazos);
+        partes = armarBoceto(b, tam);
+        // se dibuja como se siente: con lágrimas si está triste, con rayas alrededor si está enojado o feliz
+        const c = cajaDe(partes), ojosY = c[2] + (c[3] - c[2]) * 0.72;
+        if (e.tristeza > 0.4) partes = juntar(partes, aPartes([-1, 1].map(s => [colorDe('tristeza'), [[s * (c[1] - c[0]) * 0.15, ojosY], [s * (c[1] - c[0]) * 0.16, ojosY - 40]]])));
+        if (intenso > 0.4) partes = juntar(partes, aPartes(trazosDeSentir(tam * 0.4, [c[0] - 60, c[1] + 60, c[3], c[3] + 60])));
+        nombre = 'a sí mismo'; sobre = 'yo';
+      } else if (estilo === 'escribir') {
+        texto = idearTexto();
+        partes = [{ color: intenso > 0.35 ? colorDe(Object.entries({ alegria: e.alegria, enojo: e.enojo, miedo: e.miedo, tristeza: e.tristeza }).sort((a, b) => b[1] - a[1])[0][0]) : colorDe('escribir'), trazos: trazosDeTexto(texto) }];
+        nombre = `"${texto}"`;
+        if (texto.includes(sinTilde(otroDe(yo).nombre)) && (texto.includes('ODIO') || texto.includes('MALO'))) contra = otroDe(yo);
+      } else {
+        partes = aPartes(trazosDeSentir(tam, null));
+        nombre = 'lo que siente'; sobre = null;
+      }
+      if (!partes.length) { partes = aPartes(trazosDeSentir(tam, null)); nombre = 'lo que siente'; estilo = 'sentir'; }
+      // a lo más 3 colores (cada color es un viaje a la mesita)
+      const colores = partes.map(p => p.color);
+      if (colores.length > 3) { const sobran = partes.splice(2); partes.push({ color: 'negro', trazos: sobran.flatMap(p => p.trazos) }); partes = juntar(partes); }
+      if (estilo !== 'escribir') partes = aMano(partes);
+      { const c = cajaDe(partes), k = Math.min(1, 520 / (c[1] - c[0] || 1), 300 / (c[3] - c[2] || 1));   // que quepa en la pared
+        const cx = (c[0] + c[1]) / 2, cy = (c[2] + c[3]) / 2;
+        partes = partes.map(p => ({ color: p.color, trazos: p.trazos.map(t => t.map(([x, y]) => [(x - cx) * k, (y - cy) * k])) })); }
+      mente.dibujados = [sobre || estilo, ...(mente.dibujados || [])].slice(0, 6);
+      return { nombre, partes, estilo, sobre, texto, contra };
+    }
+    // lo que hizo con el plumón lo vuelve a intentar (o no) según cómo le fue
+    function ajustarEstilo(estilo, f) {
+      if (!estilo || !mente.estilos) return;
+      mente.estilos[estilo] = limitar(mente.estilos[estilo] * f, [0.1, 4]);
     }
 
     // ---- La goma de borrar (en la mesita, junto a los plumones) ----
@@ -2744,7 +3157,8 @@
       if (!GOMA.enMesa) { mente.tAccion = 0; return; }   // la goma la tiene el otro
       const todos = PAREDES_PINTABLES.flatMap(p => p.dibujos.filter(d => d.trazos.length).map(d => ({ p, d })));
       if (!todos.length) { mente.tAccion = 0; return; }
-      todos.sort((a, b) => a.d.gusto - b.d.gusto);
+      const valor = d => (d.autor === yo ? d.gusto : 0.5) + (d.sobre && d.sobre !== 'yo' ? cosaV(d.sobre) * 0.5 : 0) - (d.contra === yo ? 2 : 0);
+      todos.sort((a, b) => valor(a.d) - valor(b.d));
       const { p, d } = Math.random() < 0.7 ? todos[0] : todos[Math.floor(Math.random() * todos.length)];
       let trazos;
       if (Math.random() < 0.25) trazos = [...d.trazos];
@@ -2801,10 +3215,38 @@
         if (j.idx >= j.trazos.length) terminarBorrar(j);
       }
     }
+    // Terminó un dibujo o un texto: practicó, y lo que salió le gusta más o menos; el otro, si está cerca, lo mira
+    function terminoObra(j) {
+      const idea = j.idea, d = j.dibujo;
+      mente.aviso = idea.texto ? `escribí: ${idea.texto}` : idea.estilo === 'sentir' ? 'dibujé lo que siento' : idea.estilo === 'yo' ? '¡me dibujé!' : `¡dibujé ${idea.nombre}!`; mente.tAviso = 2.4;
+      if (idea.texto) mente.habEscribir = Math.min(1, (mente.habEscribir || 0) + 0.06);
+      else mente.habDibujo = Math.min(1, (mente.habDibujo || 0) + 0.05);
+      // le gusta su obra según cómo se siente y si la cosa le gusta
+      const bien = bienestar();
+      d.gusto = limitar(d.gusto + bien * 0.3 + (idea.sobre ? cosaV(idea.sobre) * 0.3 : 0), [0, 1]);
+      ajustarEstilo(idea.estilo, 1 + 0.15 * (d.gusto - 0.4));
+      if (bien > 0.2) cosa('pintar', 0.05);
+      // descargarse dibujando lo que siente le baja un poco el enojo y la pena
+      if (idea.estilo === 'sentir' || idea.texto) { mente.emo.enojo = Math.max(0, mente.emo.enojo - 0.08); mente.emo.tristeza = Math.max(0, mente.emo.tristeza - 0.08); }
+      const autor = yo;
+      conPersonaje(otroDe(yo), () => {
+        if (distA(autor) > 950 || mente.acostado > 0.5 || mente.dormidoPiso || mente.desmayo) return;
+        // lee lo que escribió: aprende esas palabras (tal como están escritas)
+        if (idea.texto) for (const p of idea.texto.split(' ')) aprenderPalabra(p);
+        if (idea.contra === yo) {
+          mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.2); mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.15);
+          cosa('el otro', -0.15); cambiarRelacion(-0.1);
+          mente.aviso = idea.texto ? '¡¿qué escribiste de mí?!' : '¡¿me dibujaste así?!'; mente.tAviso = 2.2;
+          if (libreParaJugar() && !(mente.juego && TAREAS[mente.juego.tipo])) { mente.despues = Math.random() < 0.5 ? 'borrar' : 'pintar'; mente.tAccion = Math.min(mente.tAccion, 1.5); }
+        } else if (idea.sobre === 'el otro' && cosaV('el otro') >= 0 && mente.tAviso <= 0) {
+          mente.aviso = '¡ese soy yo!'; mente.tAviso = 1.8; mente.emo.alegria = Math.min(1, mente.emo.alegria + 0.15); cambiarRelacion(0.05);
+        } else if (mente.tAviso <= 0 && Math.random() < 0.4) { mente.aviso = idea.texto ? `"${idea.texto}"...` : 'qué lindo'; mente.tAviso = 1.6; }
+      });
+    }
     function terminarBorrar(j) {
       if (!j.dibujo.trazos.length) j.pared.dibujos = j.pared.dibujos.filter(x => x !== j.dibujo);
       redibujar(j.pared);
-      mente.aviso = j.dibujo.trazos.length ? 'mejor así' : 'chao, ' + j.dibujo.nombre.replace(/^(un|una|unas|su nombre:) /, '');
+      mente.aviso = j.dibujo.trazos.length ? 'mejor así' : j.dibujo.contra === yo ? '¡listo, borrado!' : j.dibujo.texto ? 'chao, letras' : j.dibujo.sobre && j.dibujo.sobre !== 'yo' ? 'chao, ' + j.dibujo.nombre.replace(/^(a|al) /, '') : 'chao, dibujo';
       mente.tAviso = 1.8;
       j.punta = null;
       j.fase = 'devolver';
@@ -2817,11 +3259,14 @@
       const lugar = elegirLugar(anchoDe(idea.partes));
       if (!lugar) { mente.tAccion = 0; return; }
       // el dibujo queda guardado como trazos (puntos a lo largo de la pared y altura), así se puede borrar
-      const dibujo = { nombre: idea.nombre, s: lugar.s, h: lugar.h, ancho: anchoDe(idea.partes), gusto: Math.random(), trazos: [] };
+      const dibujo = { nombre: idea.nombre, s: lugar.s, h: lugar.h, ancho: anchoDe(idea.partes), gusto: Math.random() * 0.6 + 0.2, trazos: [],
+                       autor: yo, sobre: idea.sobre, contra: idea.contra, texto: idea.texto };
+      mente.aviso = idea.texto ? 'voy a escribir algo...' : idea.estilo === 'sentir' ? 'voy a dibujar lo que siento' : idea.estilo === 'yo' ? 'me voy a dibujar' : `voy a dibujar ${idea.nombre}`;
+      mente.tAviso = 2;
       lugar.pared.dibujos.push(dibujo);
       mente.juego = { tipo: 'pintar', fase: 'aMesa', idea, lugar, dibujo, parte: 0, trazo: 0, avance: 0, plumon: null, t: 0 };
       irA(FRENTE_MESITA);
-      mente.tAccion = 90;
+      mente.tAccion = 200;   // (dibujar con varios colores toma su tiempo)
     }
     const plumonEnMano = () => PLUMONES.find(p => !p.enMesa && p.dueno === yo);
     function guardarPlumon() {   // deja en la mesa lo que tenga en la mano
@@ -2853,7 +3298,7 @@
         Object.assign(j, { fase: 'admirar', t: 2.2 });
         mente.giroForzado = j.lugar.pared.mirar;
         mente.mirarA = j.lugar.pared.enMundo(j.lugar.s, j.lugar.h);
-        mente.aviso = `¡dibujé ${j.idea.nombre}!`; mente.tAviso = 2.2;
+        terminoObra(j);
       }
     }
     // dibuja un poquito cada cuadro, siguiendo los trazos
@@ -2974,7 +3419,7 @@
       for (const o of paredOculta) o.a = o.b = false;
       const c = new DOMMatrix(mundo.style.transform).inverse().transformPoint(new DOMPoint(0, 0, PERSPECTIVA));
       const cam = [c.x / c.w, c.y / c.w, c.z / c.w];
-      const quien = [CONTROL.pos.x, -200, CONTROL.pos.z];   // el que controlas
+      const quien = camLibre ? [camPos.x, -camAltura, camPos.z] : [CONTROL.pos.x, -200, CONTROL.pos.z];   // lo que sigue la cámara
       for (const s of superficies) {
         const delante = punto(s.normal, restar(cam, s.punto)) > 0;
         const tapa = delante && punto(s.normal, restar(quien, s.punto)) < 0;
@@ -3003,11 +3448,12 @@
         jugador.style.transform =
           `translate3d(${pos.x}px, 0, ${pos.z}px) rotateY(${orientacion}rad)`;
       });
+      if (!camLibre) camAltura = suavizar(camAltura, ALTO * CONTROL.escala / 2, SUAVIDAD_SEGUIR, dtActual || 0.016);
       mundo.style.transform =
         `translateZ(${-actual.distancia}px)` +
         ` rotateX(${actual.inclinacion}deg)` +
         ` rotateY(${actual.giro}deg)` +
-        ` translate3d(${-camPos.x}px, ${ALTO * CONTROL.escala / 2}px, ${-camPos.z}px)`;
+        ` translate3d(${-camPos.x}px, ${camAltura}px, ${-camPos.z}px)`;
       esconderParedes();
       dibujarPersonaje();
     }
@@ -3085,6 +3531,12 @@
     });
     Object.assign(CHICO.mente, { animo: 'jugueton', animos: { jugueton: 3, curioso: 1.5, tranquilo: 0.8, aburrido: 0.6 } });
     Object.assign(CHICO.mente.nec, { hambre: 0.42, sueno: 0.1 });
+    // las palabras que saben al empezar (el grande sabe escribir algo; el pequeño casi nada: aprende leyendo al grande)
+    GRANDE.mente.palabras = new Set(['YO', 'NO', 'SI', 'ME', 'TE', 'MI', 'TU', 'EL', 'LA', 'AL', 'ES', 'ERES', 'SOY', 'ESTOY', 'TENGO', 'GUSTA',
+      'ODIO', 'HOLA', 'ADIOS', 'HAMBRE', 'SUEÑO', 'FELIZ', 'TRISTE', 'ENOJADO', 'MIEDO', 'MALO', 'AMIGO', 'GRANDE', 'PEQUEÑO', 'SOL']);
+    CHICO.mente.palabras = new Set(['YO', 'NO', 'SI', 'MI', 'HOLA', 'PEQUEÑO', 'SOL']);
+    Object.assign(GRANDE.mente, { habDibujo: 0.35, habEscribir: 0.5 });
+    Object.assign(CHICO.mente, { habDibujo: 0.05, habEscribir: 0 });
     GANAS.jugueton = { pasear: 1, brincar: 2, saludar: 0.8, patear: 1.8, lanzar: 1.8, malabares: 1.2, encestar: 1.5,
                        cabeza: 1.2, pintar: 1, boton: 1.2, perseguir: 1, jugarCon: 0.9, molestar: 0.7, saludarOtro: 0.4 };
     // lo que hace el pequeño en su pieza (en cualquier ánimo)
@@ -3327,6 +3779,7 @@
       for (const pj of PJS) conPersonaje(pj, () => {
         const cariño = Math.max(0, cosaV(g.nombre)) + Math.max(0, cosaV('las gallinas')) * 0.5;
         mente.emo.tristeza = Math.min(1, mente.emo.tristeza + 0.12 + cariño * 0.7);
+        if (cariño > 0.3) mente.perdidas = [...(mente.perdidas || []), g.nombre].slice(-3);
         // aprenden por las malas que hay que cuidarlas
         if (causa !== 'golpes') { mente.cuidado = Math.min(1, mente.cuidado + 0.3); aprender('alimentarGallinas', 0.7, 0.3); aprender('darAgua', 0.6, 0.3); }
         else if (mente.conciencia > 0.3) { mente.rencor.camara = Math.min(1, mente.rencor.camara + 0.1 + cariño * 0.4); cosa('la cámara', -0.2 - cariño); }
@@ -3417,7 +3870,10 @@
 
     // ---- Lo que sabe, lo que le gusta y lo que odia ----
     const cosaV = k => mente.cosas[k] || 0;
-    const cosa = (k, d) => { mente.cosas[k] = limitar(cosaV(k) + d, [-1, 1]); };
+    const cosa = (k, d) => {
+      mente.cosas[k] = limitar(cosaV(k) + d, [-1, 1]);
+      if (Math.abs(mente.cosas[k]) > 0.2 && typeof palabraDe === 'function') aprenderPalabra(palabraDe(k));   // lo que le importa, sabe cómo se llama
+    };
     // con qué cosa tiene que ver cada actividad (si odia esa cosa, le dan menos ganas)
     const COSA_DE = {
       comerMaiz: 'el maíz', comerHuevoCrudo: 'los huevos crudos', cocinarHuevo: 'los huevos cocidos', cocinarGallina: 'el pollo asado',
@@ -3514,8 +3970,8 @@
         const hambreG = vivas.reduce((s, g) => s + g.hambre, 0) / vivas.length, sedG = vivas.reduce((s, g) => s + g.sed, 0) / vivas.length;
         // si está en el patio oye a las gallinas reclamando
         const oye = cuartoDe(pos.x) === PATIO ? 3 : 1;
-        if (RECURSOS.maiz >= 1) w.alimentarGallinas = (0.08 + cuidado * (RECURSOS.comedero < 3 ? 1.2 : 0.15) * (0.5 + hambreG) * (hambreG > 0.6 ? oye : 1)) * c('alimentarGallinas');
-        if (RECURSOS.baldeEnLlave) w.darAgua = (0.06 + cuidado * (RECURSOS.agua < 3 ? 1.1 : 0.1) * (0.5 + sedG) * (sedG > 0.6 ? oye : 1)) * c('darAgua');
+        if (RECURSOS.maiz >= 1) w.alimentarGallinas = (0.08 + cuidado * (RECURSOS.comedero < 3 ? 1.2 : 0.15) * (0.5 + hambreG) * (hambreG > 0.6 ? oye : 1) + (hambreG > 0.6 && RECURSOS.comedero < 1 ? 1.2 : 0)) * c('alimentarGallinas');
+        if (RECURSOS.baldeEnLlave) w.darAgua = (0.06 + cuidado * (RECURSOS.agua < 3 ? 1.1 : 0.1) * (0.5 + sedG) * (sedG > 0.6 ? oye : 1) + (sedG > 0.6 && RECURSOS.agua < 1 ? 1.2 : 0)) * c('darAgua');
       }
       if (PLANTAS.some(p => p.crec >= 1)) w.cosechar = (0.1 + (RECURSOS.maiz < 5 ? 0.8 : 0.15) + apetito * 0.3) * c('cosechar');
       if (RECURSOS.nido.length) w.recogerHuevos = (0.12 + RECURSOS.nido.length * 0.2 + apetito * 0.3) * c('recogerHuevos');
@@ -3731,6 +4187,7 @@
           cosa('el otro', -0.25);
           cambiarRelacion(-0.2 - cariño * 0.2);
           mente.aviso = `¡¿qué le vas a hacer a ${g.nombre}?!`; mente.tAviso = 2.4;
+          if (Math.random() < 0.6) hacerDedo('otro', '');
         } else if (mente.tAviso <= 0) { mente.aviso = 'mmm... pollo'; mente.tAviso = 1.6; }
       });
     }
@@ -3848,6 +4305,7 @@
         mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.25);
         cosa('el otro', -0.2);
         mente.aviso = '¡me tiraste un huevo!'; mente.tAviso = 2;
+        if (Math.random() < 0.5) hacerDedo('otro', '');
         // se la quiere devolver
         if (libreParaJugar() && !(mente.juego && TAREAS[mente.juego.tipo])) {
           mente.despues = RECURSOS.canasta.length + RECURSOS.nido.length && Math.random() < 0.5 ? 'lanzarHuevo' : 'empujar';
@@ -3873,6 +4331,13 @@
       yo.corazones = Math.max(0, (yo.corazones || 0) - dt);
       yo.confuso = Math.max(0, (yo.confuso || 0) - dt);
       yo.cubrirse = Math.max(0, (yo.cubrirse || 0) - dt);
+      // mira alrededor y se acuerda de lo que ve
+      mente.tMirar = (mente.tMirar || 0) - dt;
+      if (mente.tMirar <= 0 && !dormido && mente.acostado < 0.5) { mente.tMirar = 1.5; mirarAlrededor(); }
+      // cuando siente algo fuerte, a veces encuentra la palabra para eso
+      for (const [emo, palabra] of [['alegria', 'FELIZ'], ['tristeza', 'TRISTE'], ['enojo', 'ENOJADO'], ['miedo', 'MIEDO']])
+        if (mente.emo[emo] > 0.6 && Math.random() < dt * 0.02) aprenderPalabra(palabra);
+      if (mente.nec.hambre > 0.7 && Math.random() < dt * 0.01) aprenderPalabra('HAMBRE');
       if (mente.accion !== 'sentado') mente.llorando = false;
       // hambre, sueño y fatiga
       n.hambre = Math.min(1, n.hambre + dt / P.hambreCada * (dormido ? 0.5 : 1));
@@ -3938,8 +4403,11 @@
       if (mente.conciencia > 0.35 && mente.rencor.camara > 0.35 && (yo.distCam ?? 999) < 420 && autonomo() && libre &&
           mente.dedo <= 0 && !(mente.juego && TAREAS[mente.juego.tipo]) && Math.random() < dt * 0.25) {
         if (e.miedo > e.enojo) { mente.molesto = Math.max(mente.molesto, 4); mente.molestoPor = 'golpes'; mente.tAccion = 0; }
-        else { mente.dedo = 2; mente.aviso = 'tú otra vez...'; mente.tAviso = 1.6; }
+        else hacerDedo('camara');
       }
+      // enojado con el otro: si lo tiene cerca, de vez en cuando le saca el dedo
+      if (mente.rencor.otro > 0.3 && e.enojo > 0.3 && distA(otroDe(yo)) < 650 && libre && mente.dedo <= 0 &&
+          Math.random() < dt * 0.12 * (mente.rencor.otro + e.enojo)) hacerDedo('otro');
       // lo que piensa de vez en cuando
       if (autonomo() && libre && mente.tAviso <= 0 && Math.random() < dt * 0.05) {
         const frase = n.hambre > 0.7 ? 'tengo hambre...' : n.sueno > 0.75 ? 'qué sueño...' : n.fatiga > 0.8 ? 'estoy cansado...'
@@ -3947,11 +4415,36 @@
         if (frase) { mente.aviso = frase; mente.tAviso = 1.6; }
       }
     }
+    // qué tan bien se siente (para aprender si algo le hizo bien o mal)
+    const bienestar = () => { const e = mente.emo; return e.alegria - e.tristeza - e.miedo - e.enojo * 0.7 + mente.nec.salud * 0.3; };
     // más lento si está agotado, con hambre, con sueño o enfermo
     function factorCuerpo() {
       const n = mente.nec;
       return Math.max(0.35, 1 - 0.5 * Math.max(0, n.fatiga - 0.6) / 0.4 - 0.3 * Math.max(0, n.hambre - 0.75) / 0.25
                             - 0.25 * Math.max(0, n.sueno - 0.7) / 0.3 - 0.3 * Math.max(0, 0.4 - n.salud) / 0.4);
+    }
+    // El dedo del medio: a la cámara (a ti) o al otro, cuando está enojado con él
+    function hacerDedo(a, frase) {
+      if (mente.acostado > 0.5 || mente.tirado > 0.3 || mente.dormidoPiso || mente.desmayo) return;
+      mente.dedo = azarEntre(2, 3.2); mente.dedoA = a;
+      if (frase === undefined) {
+        const f = a === 'otro' ? ['¡toma!', 'pesado...', 'hmph'] : ['tú otra vez...', '¡toma!', 'mira esto'];
+        frase = f[Math.floor(Math.random() * f.length)];
+      }
+      if (frase) { mente.aviso = frase; mente.tAviso = 1.6; }
+      if (a === 'otro') {
+        // el otro, si lo ve, se enoja (y a veces se lo devuelve)
+        const yoMismo = yo;
+        conPersonaje(otroDe(yo), () => {
+          if (distA(yoMismo) > 800 || mente.acostado > 0.5 || mente.dormidoPiso || mente.desmayo) return;
+          mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.12);
+          mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.06);
+          cosa('el otro', -0.06);
+          if (mente.dedo <= 0 && Math.random() < 0.3 + mente.rencor.otro * 0.5) setTimeout(() => conPersonaje(otroDe(yoMismo), () => hacerDedo('otro', '¡tú también!')), 700);
+          else if (mente.tAviso <= 0) { mente.aviso = '¡oye!'; mente.tAviso = 1.4; }
+        });
+        cambiarRelacion(-0.04);
+      }
     }
     // Asustado, enojado o triste: en vez de jugar hace otra cosa
     function reaccionEmocional() {
@@ -4136,7 +4629,7 @@
           .filter(([, v]) => v > 0.15).map(([k, v]) => `${k} ${pct(v)}%`);
         if (m.rencor.camara > 0.1) sient.push(`rencor contigo ${pct(m.rencor.camara)}%`);
         if (m.rencor.otro > 0.1) sient.push(`rencor con el ${otro.nombre} ${pct(m.rencor.otro)}%`);
-        html += `<div class="pj"><b>${p === CONTROL ? '▶ ' : ''}${p.nombre}</b> · ${NOMBRE_ANIMO[p.texto] || p.texto || ''}` +
+        html += `<div class="pj"><b>${p === CONTROL && !camLibre ? '▶ ' : ''}${p.nombre}</b> · ${NOMBRE_ANIMO[p.texto] || p.texto || ''}` +
                 `<div class="fila">${barra('hambre', n.hambre)}${barra('sueño', n.sueno)}${barra('fatiga', n.fatiga)}${barra('salud', n.salud)}</div>` +
                 (sient.length ? `<div class="det emo">${sient.join(' · ')}</div>` : '');
         if (verDetalle) {
@@ -4269,6 +4762,7 @@
         } else {
           mente.aviso = '¡oye!'; mente.tAviso = 1.6;
           Object.assign(mente, { molesto: 5, molestoPor: 'otro' });
+          if (Math.random() < 0.45) hacerDedo('otro', '');
           cambiarRelacion(fuerte ? -0.15 : -0.1);
           if (libreParaJugar()) {
             soltarCubo();
@@ -4458,7 +4952,7 @@
     function actualizarEtiqueta() {
       const rel = RELACION.v > 0.45 ? 'se llevan muy bien' : RELACION.v > 0.1 ? 'se llevan bien'
                 : RELACION.v > -0.25 ? 'se llevan más o menos' : 'están peleados';
-      const texto = PJS.map(p => `${p === CONTROL ? '▶ ' : ''}${p.nombre}: ${NOMBRE_ANIMO[p.texto] || p.texto || ''}`).join('   ·   ') + '   ·   ' + rel;
+      const texto = (camLibre ? '🎥 cámara libre   ·   ' : '') + PJS.map(p => `${p === CONTROL && !camLibre ? '▶ ' : ''}${p.nombre}: ${NOMBRE_ANIMO[p.texto] || p.texto || ''}`).join('   ·   ') + '   ·   ' + rel;
       if (etiquetaAnimo.textContent !== texto) etiquetaAnimo.textContent = texto;
       actualizarPaneles();
     }
@@ -4484,6 +4978,7 @@
       const dt = Math.min((ahora - antes) / 1000, 0.05);
       antes = ahora;
       moverCamaraConFlechas(dt);
+      moverCamaraLibre(dt);
       for (const k of ['giro', 'inclinacion', 'distancia'])
         actual[k] = suavizar(actual[k], objetivo[k], SUAVIDAD_CAM, dt);
       for (let i = 0; i < VEL_TIEMPO; i++) pasoDelTiempo(dt);
@@ -4551,12 +5046,14 @@
       const ayes = seguidos >= 4 ? ['¡basta!', '¡para ya!', '¡¿por qué?!'] : e.miedo > 0.6 ? ['¡ay! ¡no!', '¡auch!'] : ['¡ay!', '¡auch!', '¡oye!'];
       yo.ay = ayes[Math.floor(Math.random() * ayes.length)];
       if (!sabe) yo.confuso = 2.2;                      // no sabe de dónde vino
+      else if (seguidos < 3 && e.enojo > 0.6 && e.enojo > e.miedo && Math.random() < 0.4) hacerDedo('camara', '');
       if (seguidos >= 3) {
         mente.molesto = 12 + 12 * mente.rencor.camara; mente.molestoPor = 'golpes';
-        if (sabe && e.enojo > e.miedo) mente.dedo = 2.6;                  // sabe quién fue
+        if (sabe && e.enojo > e.miedo) hacerDedo('camara', '');            // sabe quién fue
         golpe.veces = golpe.veces.slice(-2);
       }
       reaccionAlGolpe(yo);
+      if (mente.juego && mente.juego.tipo === 'pintar') ajustarEstilo(mente.juego.idea.estilo, 0.7);
       soltarCubo();
       if (mente.dormidoPiso) { mente.accion = 'pararse'; mente.tAccion = 0; mente.aviso = '¡déjame dormir!'; mente.tAviso = 2; e.enojo = Math.min(1, e.enojo + 0.2); golpe.empuje = [0, 0]; return; }
       if (mente.desmayo) { golpe.empuje = [0, 0]; return; }   // desmayado: ni se mueve
@@ -4583,6 +5080,7 @@
         golpe.vz += (Math.random() < 0.5 ? -1 : 1) * 140; golpe.t = Math.max(golpe.t, 0.15);
         const frases = r > 0.3 ? ['¡no me toques!', 'ahora vienes con cariño...', 'déjame'] : ['déjame', '¡no!'];
         mente.aviso = frases[Math.floor(Math.random() * frases.length)]; mente.tAviso = 1.8;
+        if (r > 0.45 && Math.random() < 0.35) hacerDedo('camara', '');
         mente.rencor.camara = Math.max(0, r - 0.015);   // igual se le pasa un poquito
         e.miedo = Math.max(0, e.miedo - 0.03);
         return;
@@ -4595,6 +5093,7 @@
       // aprender de buena manera: lo que estaba haciendo le gusta más
       const haciendo = queHace();
       if (haciendo) aprender(haciendo, 1, 0.3);
+      if (mente.juego && mente.juego.tipo === 'pintar') ajustarEstilo(mente.juego.idea.estilo, 1.35);   // le gustó lo que estaba haciendo
       yo.corazones = 1.6;
       golpe.vCab -= 60;
       const frases = haciendo && TAREAS[haciendo] ? ['jeje', '¿así está bien?', '♥'] : ['jeje', '¡qué rico!', 'mmm ♥'];

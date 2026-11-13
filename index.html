@@ -3500,6 +3500,7 @@
       for (const k of ['paciencia', 'cuidado', 'generoso', 'irritable', 'orgulloso', 'perezoso', 'alegre'])
         p[k] = limitar(p[k] + (Math.random() - 0.5) * 0.2, [0.05, 0.95]);
       p.aprende = limitar(p.aprende + (Math.random() - 0.5) * 0.2, [0.4, 1.3]);
+      p.gallinasIdeal = Math.round(limitar(p.gallinasIdeal + (Math.random() - 0.5) * 2.4, [3, 10]));   // cuántas gallinas le gustaría tener
       return p;
     }
     function crearPersonaje(datos) {
@@ -3524,7 +3525,8 @@
       // su forma de ser: cada cuánto le da hambre y sueño, cuánto aguanta, qué tan miedoso,
       // qué tan rencoroso (más = le dura más) y qué tan curioso es para probar cosas nuevas
       pers: forma({ hambreCada: 300, suenoCada: 480, aguante: 1, miedoso: 1, rencoroso: 1.25, curiosidad: 0.75, gloton: 1,
-                    paciencia: 0.8, cuidado: 0.75, generoso: 0.35, irritable: 0.7, orgulloso: 0.8, perezoso: 0.55, alegre: 0.3, aprende: 0.7 }),
+                    paciencia: 0.8, cuidado: 0.75, generoso: 0.35, irritable: 0.7, orgulloso: 0.8, perezoso: 0.55, alegre: 0.3, aprende: 0.7,
+                    gallinasIdeal: 5 }),   // práctico: pocas gallinas, bien cuidadas
     });
     // El pequeño: más chico, más rápido, más juguetón y con dos mechones
     const domChico = jugador.cloneNode(true);
@@ -3535,7 +3537,8 @@
       dom: { jugador: domChico, personaje: domChico.querySelector('.personaje'), sombra: domChico.querySelector('.sombra') },
       cama: { lado: [2250, 0, 420], acostado: { x: CAMITA.x0 + 20, z: (CAMITA.z0 + CAMITA.z1) / 2, altura: CAMITA.colchon + 70 * 0.65 } },
       pers: forma({ hambreCada: 245, suenoCada: 400, aguante: 1.2, miedoso: 1.4, rencoroso: 0.95, curiosidad: 1, gloton: 1.2,
-                    paciencia: 0.2, cuidado: 0.3, generoso: 0.8, irritable: 0.35, orgulloso: 0.25, perezoso: 0.2, alegre: 0.8, aprende: 1.1 }),
+                    paciencia: 0.2, cuidado: 0.3, generoso: 0.8, irritable: 0.35, orgulloso: 0.25, perezoso: 0.2, alegre: 0.8, aprende: 1.1,
+                    gallinasIdeal: 9 }),   // le encantan: quiere muchas
     });
     Object.assign(CHICO.mente, { animo: 'jugueton', animos: { jugueton: 3, curioso: 1.5, tranquilo: 0.8, aburrido: 0.6 } });
     Object.assign(CHICO.mente.nec, { hambre: 0.42, sueno: 0.1 });
@@ -3671,7 +3674,7 @@
     const PLUMAJES = ['#f4f1ea', '#c98a4b', '#3b3434', '#e9d8b4', '#d9a066'];
     const GALLINAS = [];
     const MAX_GALLINAS = 10;
-    let nGallinas = 0, tSinGallinas = 0;
+    let nGallinas = 0, tSinGallinas = 0, tHistorial = 0;
     function nuevaGallina(x, z, edad = 1) {
       const usados = GALLINAS.map(g => g.nombre);
       const nombre = NOMBRES_GALLINA.find(n => !usados.includes(n)) || 'Pollita';
@@ -3848,6 +3851,8 @@
       }
       for (const p of PLANTAS) p.crec = Math.min(1, p.crec + dt * p.vel);
       moverSarten(dt);
+      tHistorial -= dt;
+      if (tHistorial <= 0) { tHistorial = 15; HISTORIAL_CORRAL.push(cuentaGallinas()); if (HISTORIAL_CORRAL.length > 8) HISTORIAL_CORRAL.shift(); }
       // si el corral queda vacío (y no hay huevos que vayan a nacer), al rato llega una gallina perdida
       if (!GALLINAS.some(g => g.estado !== 'muerta') && !RECURSOS.nido.some(h => h.nace && !h.podrido)) {
         tSinGallinas += dt;
@@ -3967,6 +3972,14 @@
       for (const k in mente.castigos) if (g[k]) g[k] *= Math.pow(0.8, mente.castigos[k]);
     }
     const COMIDA_ACCIONES = ['comerMaiz', 'comerHuevoCrudo', 'cocinarHuevo', 'cocinarGallina'];
+    // Cómo ve el corral: cuántas hay comparado con las que quiere, y si se están acabando
+    const HISTORIAL_CORRAL = [];
+    const cuentaGallinas = () => GALLINAS.filter(g => g.estado !== 'muerta').length;
+    function estadoCorral() {
+      const n = cuentaGallinas(), ideal = yo.pers.gallinasIdeal;
+      const antes = HISTORIAL_CORRAL.length ? Math.max(...HISTORIAL_CORRAL) : n;
+      return { n, ideal, lleno: limitar((n - ideal) / 3, [0, 1]), faltan: limitar((ideal - n) / 3, [0, 1]), bajando: antes - n > 0 ? limitar((antes - n) / 2, [0, 1]) : 0 };
+    }
     function ganasPatio() {
       const w = {}, h = mente.nec.hambre, e = mente.emo, c = conoce;
       const vivas = GALLINAS.filter(g => g.estado === 'viva'), adultas = vivas.filter(g => g.edad >= 1);
@@ -3997,14 +4010,22 @@
         w.mirarGallinas = (0.2 + cariño * 0.5) * c('mirarGallinas');
         if (yo.escala < 0.8 || e.enojo > 0.4) w.perseguirGallinas = (0.15 + e.enojo * 0.6) * c('perseguirGallinas') * Math.max(0.1, 1 - cariño);
         const cuidado = 0.3 + mente.cuidado * 1.5 + cariño;
+        // con el corral lleno se acaba más rápido la comida: se preocupa antes; si se están muriendo, también
+        const C = estadoCorral(), n = C.n, poca = Math.max(3, n * 0.9), pocaAgua = Math.max(3, n * 0.7);
+        const preocupa = 1 + C.lleno * 1.5 + C.bajando + (n >= 8 ? 0.8 : 0);
         const hambreG = vivas.reduce((s, g) => s + g.hambre, 0) / vivas.length, sedG = vivas.reduce((s, g) => s + g.sed, 0) / vivas.length;
         // si está en el patio oye a las gallinas reclamando
         const oye = cuartoDe(pos.x) === PATIO ? 3 : 1;
-        if (RECURSOS.maiz >= 1) w.alimentarGallinas = (0.08 + cuidado * (RECURSOS.comedero < 3 ? 1.2 : 0.15) * (0.5 + hambreG) * (hambreG > 0.6 ? oye : 1) + (hambreG > 0.6 && RECURSOS.comedero < 1 ? 1.2 : 0)) * c('alimentarGallinas');
-        if (RECURSOS.baldeEnLlave) w.darAgua = (0.06 + cuidado * (RECURSOS.agua < 3 ? 1.1 : 0.1) * (0.5 + sedG) * (sedG > 0.6 ? oye : 1) + (sedG > 0.6 && RECURSOS.agua < 1 ? 1.2 : 0)) * c('darAgua');
+        if (RECURSOS.maiz >= 1) w.alimentarGallinas = (0.08 + cuidado * (RECURSOS.comedero < poca ? 1.2 : 0.15) * (0.5 + hambreG) * (hambreG > 0.6 ? oye : 1) * preocupa + (hambreG > 0.6 && RECURSOS.comedero < n * 0.3 ? 1.2 : 0)) * c('alimentarGallinas');
+        if (RECURSOS.baldeEnLlave) w.darAgua = (0.06 + cuidado * (RECURSOS.agua < pocaAgua ? 1.1 : 0.1) * (0.5 + sedG) * (sedG > 0.6 ? oye : 1) * preocupa + (sedG > 0.6 && RECURSOS.agua < n * 0.25 ? 1.2 : 0)) * c('darAgua');
       }
-      if (PLANTAS.some(p => p.crec >= 1)) w.cosechar = (0.1 + (RECURSOS.maiz < 5 ? 0.8 : 0.15) + apetito * 0.3) * c('cosechar');
-      if (RECURSOS.nido.length) w.recogerHuevos = (0.12 + RECURSOS.nido.length * 0.2 + apetito * 0.3) * c('recogerHuevos');
+      const C = estadoCorral();
+      if (PLANTAS.some(p => p.crec >= 1)) w.cosechar = (0.1 + (RECURSOS.maiz < Math.max(5, C.n) ? 0.8 : 0.15) + apetito * 0.3) * c('cosechar') * (1 + C.lleno);
+      // juntar huevos: si quiere más gallinas los deja para que nazcan pollitos; si ya hay demasiadas, los junta antes
+      if (RECURSOS.nido.length) w.recogerHuevos = (0.12 + RECURSOS.nido.length * 0.2 + apetito * 0.3) * c('recogerHuevos') *
+                                                  (C.lleno > 0 ? 1 + 2 * C.lleno : C.faltan > 0 ? Math.max(0.15, 1 - C.faltan) + apetito * 0.3 : 1);
+      // comerse una gallina: solo si sobran para su gusto
+      if (w.cocinarGallina) w.cocinarGallina *= C.n > C.ideal ? 1 + C.lleno : 0.08;
       const flojo = yo.pers.perezoso;
       for (const k of ['alimentarGallinas', 'darAgua', 'cosechar', 'recogerHuevos', 'cocinarParaOtro']) if (w[k]) w[k] *= 1.4 - flojo * 0.9;
       for (const k in w) {
@@ -4262,7 +4283,7 @@
       alimentarGallinas: () => [
         en('saco', { dur: 1.2, pose: 'agarrar', al: j => {
           if (RECURSOS.maiz < 1) return sinMaiz();
-          j.n = Math.min(2, Math.floor(RECURSOS.maiz)); RECURSOS.maiz -= j.n; yo.lleva = { que: 'maiz', n: j.n };
+          j.n = Math.min(cuentaGallinas() > 6 ? 3 : 2, Math.floor(RECURSOS.maiz)); RECURSOS.maiz -= j.n; yo.lleva = { que: 'maiz', n: j.n };   // más gallinas, más maíz
         } }),
         en('comedero', { dur: 2, pose: 'verter', dice: 'coman, gallinitas', al: j => {
           RECURSOS.comedero = Math.min(12, RECURSOS.comedero + j.n * 2.2); yo.lleva = null; cuide('alimentarGallinas');
@@ -4280,7 +4301,11 @@
         } })],
       recogerHuevos: () => [
         en('nido', { dur: 1.4, pose: 'agarrar', antes: () => RECURSOS.nido.length > 0, al: j => {
-          j.lista = RECURSOS.nido.splice(0, 3); yo.lleva = { que: 'huevos', n: j.lista.length };
+          const C = estadoCorral(), deja = C.faltan > 0 && mente.nec.hambre < 0.6 ? 2 : 0;   // deja huevos para que nazcan
+          j.lista = RECURSOS.nido.splice(0, Math.max(0, Math.min(3, RECURSOS.nido.length - deja)));
+          if (!j.lista.length) { mente.aviso = 'mejor los dejo, que nazcan pollitos'; mente.tAviso = 2; return false; }
+          yo.lleva = { que: 'huevos', n: j.lista.length };
+          desacuerdoGallinas('huevos');
         } }),
         en('canasta', { dur: 1, pose: 'verter', al: j => { RECURSOS.canasta.push(...j.lista); yo.lleva = null; recompensa('recogerHuevos', 0.4); } })],
       mirarGallinas: () => [
@@ -4380,6 +4405,28 @@
       if (yo.lleva) { if (fallo) soltarLleva(); else yo.lleva = null; }
     }
 
+    // Si el otro hace lo contrario de lo que él quiere con el corral, reclama (según qué tan gruñón sea)
+    function desacuerdoGallinas(que) {
+      const autor = yo;
+      conPersonaje(otroDe(autor), () => {
+        if (distA(autor) > 900 || mente.acostado > 0.5 || mente.dormidoPiso || mente.desmayo) return;
+        const C = estadoCorral();
+        if (C.faltan < 0.2 && que === 'huevos') return;            // a él le da igual: tiene las que quiere
+        if (que === 'comer' && C.n - 1 > C.ideal) return;
+        const molestia = (C.faltan + (que === 'comer' ? 0.5 : 0)) * yo.pers.irritable * azarEntre(0.7, 1.5);
+        if (molestia < 0.25) return;
+        mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.1 + molestia * 0.2);
+        mente.rencor.otro = Math.min(1, mente.rencor.otro + molestia * 0.08);
+        cosa('el otro', -0.05); cambiarRelacion(-0.04 * molestia);
+        mente.aviso = que === 'huevos' ? '¡deja huevos, que nazcan pollitos!' : '¡no, que quedan pocas!'; mente.tAviso = 2;
+        // el otro le contesta según lo que quiere él
+        setTimeout(() => conPersonaje(autor, () => {
+          const mio = estadoCorral();
+          mente.aviso = mio.lleno > 0 ? 'ya hay demasiadas' : 'tengo hambre, po'; mente.tAviso = 1.8;
+          if (yo.pers.orgulloso > 0.6) { mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.1); mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.04); }
+        }), 1400);
+      });
+    }
     // ---- Lo que hace en cada tarea ----
     function sinMaiz() {
       mente.aviso = 'no queda maíz...'; mente.tAviso = 1.8;
@@ -4405,7 +4452,7 @@
       Object.assign(g, { estado: 'mano', dueno: yo, comiendo: 0, meta: null, va: null, cacareo: 1.6, dice: '¡COC COC!' });
       yo.lleva = { que: 'gallina', gallina: g }; j.gallina = g;
       for (const o of GALLINAS) if (o !== g && o.estado === 'viva') { o.susto = 2.5; o.meta = puntoCorral(); }
-      if (paraComer) avisarAlOtroDeGallina(g);
+      if (paraComer) { avisarAlOtroDeGallina(g); desacuerdoGallinas('comer'); }
     }
     function soltarGallina() {
       const l = yo.lleva;
@@ -4620,6 +4667,9 @@
         Object.assign(mente, { accion: 'sentado', tAccion: 9, meta: null, ruta: [], juego: null, giroForzado: orientacion });
         mente.aviso = 'no puedo más...'; mente.tAviso = 1.8;
       }
+      { const C = estadoCorral();   // preocupado por el corral
+        if (C.bajando > 0.4 || C.faltan > 0.6) e.tristeza = Math.min(1, e.tristeza + dt * 0.004 * (C.bajando + C.faltan));
+        if (C.lleno > 0.5 && RECURSOS.comedero < C.n * 0.5) e.miedo = Math.min(1, e.miedo + dt * 0.002); }
       // muerto de hambre: deja lo que está haciendo para ir a comer (si hay algo)
       if (n.hambre > 0.85 && libre && autonomo() && !COMIDA_ACCIONES.includes(mente.accion) && (mente.tHambre || 0) < reloj) {
         mente.tHambre = reloj + 25;
@@ -4661,8 +4711,13 @@
           Math.random() < dt * 0.12 * (mente.rencor.otro + e.enojo) * (0.5 + P.irritable * 1.2)) hacerDedo('otro');
       // lo que piensa de vez en cuando
       if (autonomo() && libre && mente.tAviso <= 0 && Math.random() < dt * 0.05) {
+        const C = estadoCorral(), enPatio = cuartoDe(pos.x) === PATIO;
         const frase = n.hambre > 0.7 ? 'tengo hambre...' : n.sueno > 0.75 ? 'qué sueño...' : n.fatiga > 0.8 ? 'estoy cansado...'
-                    : mente.rencor.otro > 0.5 && otroCerca ? 'no lo quiero ver...' : null;
+                    : mente.rencor.otro > 0.5 && otroCerca ? 'no lo quiero ver...'
+                    : C.bajando > 0.4 ? 'se están acabando las gallinas...'
+                    : enPatio && C.lleno > 0.3 && RECURSOS.comedero < C.n * 0.9 ? 'son demasiadas, no alcanza la comida'
+                    : enPatio && C.lleno > 0.3 ? 'el corral está muy lleno'
+                    : enPatio && C.faltan > 0.5 ? 'faltan gallinas...' : null;
         if (frase) { mente.aviso = frase; mente.tAviso = 1.6; }
       }
     }
@@ -4902,7 +4957,8 @@
                          rasgo(P.irritable, 'gruñón', 'tranquilo'), rasgo(P.orgulloso, 'orgulloso', 'humilde'), rasgo(P.perezoso, 'flojo', 'trabajador'),
                          rasgo(P.alegre, 'alegre', 'serio'), P.aprende >= 0.95 ? 'aprende rápido' : P.aprende <= 0.75 ? 'aprende lento' : null].filter(Boolean);
           html += `<div class="det">forma de ser: ${forma.join(', ')}<br>huevo frito: lo deja ${m.tiempoFrito.toFixed(1)} s · práctica ${pct(m.habCocina)}%` +
-                  `${m.fritos ? ' · le han salido: ' + m.fritos.join(', ') : ''}</div>`;
+                  `${m.fritos ? ' · le han salido: ' + m.fritos.join(', ') : ''}<br>` +
+                  `quiere tener ${P.gallinasIdeal} gallinas${conPersonaje(p, () => { const C = estadoCorral(); return C.bajando > 0.3 ? ' · le preocupa que se estén acabando' : C.lleno > 0.3 ? ' · le preocupa que sean demasiadas' : C.faltan > 0.3 ? ' · quiere más' : ' · está conforme'; })}</div>`;
           html += `<div class="det">le gusta: ${gusta.join(', ') || '—'}<br>odia: ${odia.join(', ') || '—'}<br>` +
                   `le teme a: ${teme.join(', ') || '—'}<br>aprendió: ${sabe.join(' · ') || 'todavía nada'}<br>` +
                   `se da cuenta de que lo miras: ${pct(m.conciencia)}%</div>`;

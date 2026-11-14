@@ -3074,7 +3074,7 @@
           const c = cajaDe(partes);
           partes = juntar(partes, aPartes([[v.tipo === 'gallina' || v.tipo === 'planta' ? 'verde' : 'cafe', [[c[0] - 30, c[2] - 6], [c[1] + 30, c[2] - 6]]]]));
         }
-        nombre = k === 'el otro' ? `al ${otroDe(yo).nombre}` : NOMBRES_GALLINA.includes(k) ? `a ${k}` : k; sobre = k;
+        nombre = k === 'el otro' ? `al ${otroDe(yo).nombre}` : NOMBRES_USADOS.has(k) ? `a ${k}` : k; sobre = k;
       } else if (estilo === 'escena') {
         // dos o tres cosas que vio, una al lado de la otra; lo que más le importa, más grande
         const piezas = temas.map(([k, v]) => conSentimiento(k, bocetoDe(v, tam * (0.55 + 0.4 * Math.min(1, Math.abs(cosaV(k)) + 0.3)))));
@@ -3673,11 +3673,14 @@
     const NOMBRES_GALLINA = ['Rosa', 'Clara', 'Pepa', 'Lola', 'Chispa', 'Nube', 'Canela', 'Tita', 'Maní', 'Coco', 'Perla', 'Luna', 'Mota', 'Kika'];
     const PLUMAJES = ['#f4f1ea', '#c98a4b', '#3b3434', '#e9d8b4', '#d9a066'];
     const GALLINAS = [];
+    const NOMBRES_USADOS = new Set();
     const MAX_GALLINAS = 10;
     let nGallinas = 0, tSinGallinas = 0, tHistorial = 0;
     function nuevaGallina(x, z, edad = 1) {
-      const usados = GALLINAS.map(g => g.nombre);
-      const nombre = NOMBRES_GALLINA.find(n => !usados.includes(n)) || 'Pollita';
+      // un nombre que no haya tenido antes ninguna gallina (así no se confunden con las que ya no están)
+      let nombre = NOMBRES_GALLINA.find(n => !NOMBRES_USADOS.has(n));
+      for (let k = 2; !nombre; k++) nombre = NOMBRES_GALLINA.map(n => `${n} ${k}`).find(n => !NOMBRES_USADOS.has(n));
+      NOMBRES_USADOS.add(nombre);
       const g = { nombre, plumaje: PLUMAJES[nGallinas++ % PLUMAJES.length], x, z, y: 0, vy: 0, ang: Math.random() * 6, edad,
                   hambre: azarEntre(0.15, 0.4), sed: azarEntre(0.15, 0.4), salud: 1, estado: 'viva', dueno: null,
                   meta: null, va: null, tPensar: azarEntre(0.5, 2), picar: 0, susto: 0, comiendo: 0, paso: 0,
@@ -4033,6 +4036,13 @@
                                                   (C.lleno > 0 ? 1 + 2 * C.lleno : C.faltan > 0 ? Math.max(0.15, 1 - C.faltan) + apetito * 0.3 : 1);
       // comerse una gallina: solo si sobran para su gusto
       if (w.cocinarGallina) w.cocinarGallina *= C.n > C.ideal ? 1 + C.lleno : 0.08;
+      // sacrificar: si hay más gallinas de las que quiere (y quedan varias adultas), saca una para comer aunque no tenga tanta hambre
+      const adultas2 = GALLINAS.filter(g => g.estado === 'viva' && g.edad >= 1).length, sobran = C.n - C.ideal;
+      if (sobran > 0 && adultas2 > 3 && h > 0.25) {
+        const cariño2 = Math.max(0, cosaV('las gallinas'));
+        w.cocinarGallina = (w.cocinarGallina || 0) + (0.3 + sobran * 0.35) * (0.4 + h) * Math.max(0.03, 1 - cariño2 * 1.3) *
+                           c('cocinarGallina') * (1 - (mente.miedos['el fogón'] || 0) * 0.9) * (1.3 - yo.pers.generoso * 0.5);
+      }
       const flojo = yo.pers.perezoso;
       for (const k of ['alimentarGallinas', 'darAgua', 'cosechar', 'recogerHuevos', 'cocinarParaOtro']) if (w[k]) w[k] *= 1.4 - flojo * 0.9;
       for (const k in w) {
@@ -4280,13 +4290,17 @@
       cocinarHuevo: () => pasosFreir(false),
       cocinarParaOtro: () => pasosFreir(true),
       cocinarGallina: () => [
-        en('comedero', { dur: 2.4, pose: 'agarrar', al: j => atraparGallina(j, true) }),
+        en('comedero', { dur: 2.4, pose: 'agarrar', antes: j => {
+          const C = estadoCorral();
+          j.sacrificio = C.n > C.ideal && mente.nec.hambre < 0.65;   // no es por hambre: es porque sobran
+          if (j.sacrificio) { mente.aviso = 'sobran gallinas... una va para la olla'; mente.tAviso = 2.2; }
+        }, al: j => atraparGallina(j, true) }),
         en('fogon', { dur: 6.5, pose: 'fogon', antes: j => {
           if (!yo.lleva || yo.lleva.que !== 'gallina') return false;
           quitarGallina(yo.lleva.gallina);
           yo.lleva = { que: 'polloCrudo' };
         }, al: j => cocinar(j, 'pollo') }),
-        { dur: 3.2, pose: 'comer', dice: 'ñam', al: j => comer('cocinarGallina', 'pollo', { gallina: j.gallina }) }],
+        { dur: 3.2, pose: 'comer', dice: 'ñam', al: j => comerPollo(j) }],
       alimentarGallinas: () => [
         en('saco', { dur: 1.2, pose: 'agarrar', al: j => {
           if (RECURSOS.maiz < 1) return sinMaiz();
@@ -4558,8 +4572,8 @@
     function comer(accion, que, extra = {}) {
       const c = COMIDAS[que], n = mente.nec, e = mente.emo;
       if (!extra.sinSoltar) yo.lleva = null;
-      const antes = n.hambre;
-      n.hambre = Math.max(0, n.hambre - c.llena);
+      const antes = n.hambre, llena = c.llena * (extra.mitad ? 0.55 : 1);
+      n.hambre = Math.max(0, n.hambre - llena);
       n.salud = Math.min(1, n.salud + 0.05);
       let r;
       if (Math.random() < (extra.podrido ? 0.9 : c.mal)) {
@@ -4571,8 +4585,8 @@
         golpe.vCab -= 120;
         r = -0.9;
       } else {
-        e.alegria = Math.min(1, e.alegria + 0.15 + c.llena * 0.4);
-        r = Math.min(1, Math.max(0, antes - 0.1) * c.llena * 3 + 0.2 + Math.max(0, cosaV(c.nombre)) * 0.3);   // más rico con más hambre
+        e.alegria = Math.min(1, e.alegria + 0.15 + llena * 0.4);
+        r = Math.min(1, Math.max(0, antes - 0.1) * llena * 3 + 0.2 + Math.max(0, cosaV(c.nombre)) * 0.3);   // más rico con más hambre
         r += c.sabor || 0;                                    // quemado o crudo no es lo mismo
         if (antes < 0.15) r = 0.05;
         mente.aviso = antes < 0.15 ? 'ya estaba lleno...' : (c.sabor || 0) < -0.5 ? 'puaj, sabe a quemado' : (c.sabor || 0) < -0.2 ? 'está como babosito...' : r > 0.6 ? '¡qué rico!' : 'mmm'; mente.tAviso = 1.6;
@@ -4591,6 +4605,24 @@
       cosa(c.nombre, r * 0.3);
       if (accion !== 'regalo') recompensa(accion, r);
       return r;
+    }
+    // El pollo asado alcanza para dos: si el otro está cerca le convida (si no quería a esa gallina, claro)
+    function comerPollo(j) {
+      const o = otroDe(yo), g = j.gallina, cocinero = yo;
+      let comparte = false;
+      if (distA(o) < 1200 && o.mente.acostado < 0.5 && !o.mente.dormidoPiso && !o.mente.desmayo && o.mente.nec.hambre > 0.15) {
+        conPersonaje(o, () => {
+          const cariño = Math.max(0, cosaV(g.nombre)) + Math.max(0, cosaV('las gallinas')) * 0.6;
+          if (cariño > 0.45) { mente.aviso = `¡no me voy a comer a ${g.nombre}!`; mente.tAviso = 2.2; return; }
+          comparte = true;
+          const r = comer('regalo', 'pollo', { gallina: g, sinSoltar: true, mitad: true });
+          if (r > 0.2) { mente.aviso = '¡gracias por el pollo!'; mente.tAviso = 1.8; cambiarRelacion(0.06); cosa('el otro', 0.06); }
+        });
+      }
+      comer('cocinarGallina', 'pollo', { gallina: g, mitad: comparte });
+      if (comparte && mente.tAviso <= 0) { mente.aviso = 'hay para los dos'; mente.tAviso = 1.6; }
+      // si fue por sobrepoblación y salió bien, aprende que sacar una de vez en cuando sirve
+      if (j.sacrificio) aprender('cocinarGallina', 0.3, 0.2);
     }
     function mirandoGallinas(j, dt) {
       j.cambio = (j.cambio || 0) - dt;
@@ -4993,7 +5025,7 @@
                 `<div class="fila">${barra('hambre', n.hambre)}${barra('sueño', n.sueno)}${barra('fatiga', n.fatiga)}${barra('salud', n.salud)}</div>` +
                 (sient.length ? `<div class="det emo">${sient.join(' · ')}</div>` : '');
         if (verDetalle) {
-          const nombre = k => k === 'el otro' ? `el ${otro.nombre}` : NOMBRES_GALLINA.includes(k) ? `${k} (gallina)` : k;
+          const nombre = k => k === 'el otro' ? `el ${otro.nombre}` : NOMBRES_USADOS.has(k) ? `${k} (gallina)` : k;
           const cosas = Object.entries(m.cosas);
           const gusta = cosas.filter(([, v]) => v > 0.2).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => nombre(k));
           const odia = cosas.filter(([, v]) => v < -0.2).sort((a, b) => a[1] - b[1]).slice(0, 5).map(([k]) => nombre(k));

@@ -91,6 +91,54 @@
         radial-gradient(ellipse 70% 90% at 50% 0%, rgba(255, 236, 200, 0.45), rgba(255, 236, 200, 0) 70%),
         linear-gradient(#cfd8c3, #b3bfa6 70%, #9aa58d);
     }
+    /* La sala de juegos (detrás de la principal): paredes amarillo pálido y piso de goma */
+    .piso.juegos {
+      background:
+        linear-gradient(rgba(60, 90, 120, 0.12) 2px, transparent 2px),
+        linear-gradient(90deg, rgba(60, 90, 120, 0.12) 2px, transparent 2px),
+        radial-gradient(circle at 50% 50%, #cfe3ef 0%, #b6d0e0 55%, #8eabbd 100%);
+      background-size: 100px 100px, 100px 100px, 100% 100%;
+      background-position: center;
+    }
+    .pared.juegos {
+      background:
+        radial-gradient(ellipse 70% 90% at 50% 0%, rgba(255, 240, 200, 0.5), rgba(255, 240, 200, 0) 70%),
+        linear-gradient(#f4e7b8, #e4d39c 70%, #cdbb84);
+    }
+    /* El almacén (delante de la principal): ladrillo y piso de cemento */
+    .piso.almacen {
+      background:
+        linear-gradient(rgba(0, 0, 0, 0.07) 2px, transparent 2px),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.07) 2px, transparent 2px),
+        radial-gradient(circle at 50% 50%, #c9c6c0 0%, #b2aea7 55%, #8e8a84 100%);
+      background-size: 120px 120px, 120px 120px, 100% 100%;
+      background-position: center;
+    }
+    .pared.almacen {
+      background:
+        repeating-linear-gradient(rgba(80, 40, 25, 0.22) 0 2px, transparent 2px 34px),
+        linear-gradient(#c98f6e, #b47a5b 70%, #9b6448);
+    }
+    /* Temporal: el patio se oscurece */
+    body.tormenta .piso.patio, body.tormenta .pared.patio, body.tormenta .techo.patio, body.tormenta .lampara.sol {
+      filter: brightness(0.5) saturate(0.55) hue-rotate(10deg);
+      transition: filter 3s;
+    }
+    .piso.patio, .pared.patio, .techo.patio, .lampara.sol { transition: filter 3s; }
+    /* la lluvia y los rayos (encima de todo, sin atrapar el mouse) */
+    #lluvia, #rayo { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 2s; }
+    #lluvia {
+      background:
+        repeating-linear-gradient(105deg, transparent 0 22px, rgba(190, 210, 235, 0.35) 22px 23px, transparent 23px 61px),
+        repeating-linear-gradient(100deg, transparent 0 37px, rgba(190, 210, 235, 0.25) 37px 38px, transparent 38px 83px),
+        rgba(30, 40, 60, 0.18);
+      background-size: 120px 160px, 170px 230px, auto;
+      animation: llueve 0.35s linear infinite;
+    }
+    body.lloviendo #lluvia { opacity: 1; }
+    body.lloviendo.adentro #lluvia { opacity: 0.25; }
+    @keyframes llueve { to { background-position: -40px 160px, -40px 230px, 0 0; } }
+    #rayo { background: #f4f7ff; transition: none; }
     /* La lámpara en el centro de cada techo */
     .lampara {
       border-radius: 50%;
@@ -216,8 +264,9 @@
   </div>
 
   <canvas id="pelota"></canvas>
+  <div id="lluvia"></div><div id="rayo"></div>
 
-  <div class="ayuda">W A S D: mover · Espacio: saltar · Shift: correr · Arrastrar o flechas: cámara · Rueda: zoom · Clic en él: un golpe · Clic derecho en él: una caricia · Clic en una gallina: espantarla · 1 / 2: controlar al grande / al pequeño · I: ver lo que piensan · T: tiempo más rápido · 0: cámara libre (W A S D, Q / E) · H: ocultar las stats · Déjalos solos y hacen su vida</div>
+  <div class="ayuda">W A S D: mover · Espacio: saltar · Shift: correr · Arrastrar o flechas: cámara · Rueda: zoom · Clic en él: un golpe · Clic derecho en él: una caricia · Clic en una gallina: espantarla · Y: que llegue un temporal · 1 / 2: controlar al grande / al pequeño · I: ver lo que piensan · T: tiempo más rápido · 0: cámara libre (W A S D, Q / E) · H: ocultar las stats · Déjalos solos y hacen su vida</div>
   <div class="animo">curioso</div>
   <div class="panel mentes"></div>
   <div class="panel recursos"></div>
@@ -576,23 +625,34 @@
       { x0: 700,  x1: 1700, z0: -700, z1: 700, clase: 'dos' },   // habitación 2 (la verde)
       { x0: 1700, x1: 2400, z0: 100,  z1: 700, clase: 'tres' },  // habitación 3: la pieza del pequeño
       { x0: -2000, x1: -700, z0: -700, z1: 700, clase: 'patio' }, // el patio (a la izquierda de la principal)
+      { x0: -700, x1: 700, z0: -2100, z1: -700, clase: 'juegos' }, // la sala de juegos (detrás de la principal)
+      { x0: -700, x1: 700, z0: 700, z1: 1400, clase: 'almacen' },  // el almacén (delante de la principal)
     ];
-    // De izquierda a derecha quedan: patio · principal · verde · pieza del pequeño
-    const ORDEN = [1, 2, 3, 0];   // el lugar en la fila de cada habitación (por su número)
-    const PATIO = 3;
+    const PATIO = 3, JUEGOS = 4, ALMACEN = 5;
+    const DZ_JUEGOS = -1400;   // todo lo de los juegos se corrió esto hacia atrás (de la principal a la sala de juegos)
     for (const c of CUARTOS) c.luz = [(c.x0 + c.x1) / 2, -(ALTO_CUARTO - 40), (c.z0 + c.z1) / 2];
-    // Puertas: cada una está en un muro (x) entre dos habitaciones (a a la izquierda, b a la derecha).
-    // La de la pieza del pequeño es chiquita: el grande no cabe.
+    // Puertas: cada una está en un muro entre dos habitaciones. Las de los costados están en un muro
+    // de x fijo (eje 'x': a a la izquierda, b a la derecha); las de adelante y atrás, en uno de z fijo
+    // (eje 'z': a atrás, b adelante). La de la pieza del pequeño es chiquita: el grande no cabe.
     const PUERTAS = [
       { x: 700,  z0: -150, z1: 150, alto: 440, a: 0, b: 1, holgura: 75 },
       { x: 1700, z0: 200,  z1: 320, alto: 300, a: 1, b: 2, holgura: 40, soloChico: true },
       { x: -700, z0: 380,  z1: 620, alto: 440, a: PATIO, b: 0, holgura: 75 },   // la puerta al patio
+      { eje: 'z', z: -700, x0: -150, x1: 150, alto: 440, a: JUEGOS, b: 0, holgura: 75 },   // a la sala de juegos
+      { eje: 'z', z: 700,  x0: -150, x1: 150, alto: 440, a: 0, b: ALMACEN, holgura: 75 },  // al almacén
     ];
     for (const d of PUERTAS) {
+      d.eje = d.eje || 'x';
+      // f: dónde está el muro · s0..s1: el hueco, a lo largo del muro · sMin..sMax: lo que abarcan las dos habitaciones
+      const A = CUARTOS[d.a], B = CUARTOS[d.b];
+      if (d.eje === 'x') Object.assign(d, { f: d.x, s0: d.z0, s1: d.z1, sMin: Math.min(A.z0, B.z0), sMax: Math.max(A.z1, B.z1) });
+      else Object.assign(d, { f: d.z, s0: d.x0, s1: d.x1, sMin: Math.min(A.x0, B.x0), sMax: Math.max(A.x1, B.x1) });
       d.hoja = { ang: 0, v: 0, lado: 1, cerca: false };
-      d.zMin = Math.min(CUARTOS[d.a].z0, CUARTOS[d.b].z0);
-      d.zMax = Math.max(CUARTOS[d.a].z1, CUARTOS[d.b].z1);
     }
+    // pasar de (f, s) de una puerta a (x, z) del mundo, y al revés
+    const enPuerta = (d, f, s) => d.eje === 'x' ? [f, s] : [s, f];
+    const fDe = (d, x, z) => d.eje === 'x' ? x : z;
+    const sDe = (d, x, z) => d.eje === 'x' ? z : x;
     const PUERTA = PUERTAS[0];
     const MARGEN = 130;        // qué tan cerca de la pared puede llegar el personaje
     const cabeEn = d => !d.soloChico || yo.escala < 0.8;   // ¿el que está cargado cabe por esa puerta?
@@ -619,14 +679,46 @@
 
     // Zonas donde puede pararse: cada habitación (sin pegarse a las paredes) y el paso de cada puerta
     const ZONAS = CUARTOS.map(c => [c.x0 + MARGEN, c.x1 - MARGEN, c.z0 + MARGEN, c.z1 - MARGEN]);
-    for (const d of PUERTAS) d.paso = [d.x - MARGEN - 60, d.x + MARGEN + 60, d.z0 + d.holgura, d.z1 - d.holgura];
+    for (const d of PUERTAS) {
+      const f0 = d.f - MARGEN - 60, f1 = d.f + MARGEN + 60, s0 = d.s0 + d.holgura, s1 = d.s1 - d.holgura;
+      d.paso = d.eje === 'x' ? [f0, f1, s0, s1] : [s0, s1, f0, f1];
+    }
     const dentroDe = (r, x, z) => x >= r[0] && x <= r[1] && z >= r[2] && z <= r[3];
     const libre = (x, z) =>
       (ZONAS.some(r => dentroDe(r, x, z)) || PUERTAS.some(d => d.hoja.ang > 60 && cabeEn(d) && dentroDe(d.paso, x, z))) &&
       !OBSTACULOS.some(([a, b, c, d]) => x > a && x < b && z > c && z < d);
-    const cuartoDe = x => x < -700 ? PATIO : x < 700 ? 0 : x < 1700 ? 1 : 2;
+    // en qué habitación está un punto (si está fuera de todas, la más cercana)
+    function cuartoDe(x, z = 0) {
+      for (let i = 0; i < CUARTOS.length; i++) { const c = CUARTOS[i]; if (x >= c.x0 && x < c.x1 && z >= c.z0 && z < c.z1) return i; }
+      let mejor = 0, dMin = Infinity;
+      CUARTOS.forEach((c, i) => {
+        const dx = Math.max(c.x0 - x, 0, x - c.x1), dz = Math.max(c.z0 - z, 0, z - c.z1), d = dx * dx + dz * dz;
+        if (d < dMin) { dMin = d; mejor = i; }
+      });
+      return mejor;
+    }
+    // Las puertas que hay que cruzar para ir de una habitación a otra (el camino más corto)
+    function caminoDePuertas(a, b, puede = cabeEn, cerradas = true) {
+      if (a === b) return [];
+      const de = new Map([[a, null]]), cola = [a];
+      while (cola.length) {
+        const r = cola.shift();
+        for (const d of PUERTAS) {
+          if (d.a !== r && d.b !== r) continue;
+          const otro = d.a === r ? d.b : d.a;
+          if (de.has(otro) || !puede(d) || (cerradas && d.cerrada && otro === PATIO)) continue;   // con temporal no se sale (pero sí se entra)
+          de.set(otro, [d, r]); cola.push(otro);
+          if (otro === b) {
+            const camino = [];
+            for (let k = b; de.get(k); k = de.get(k)[1]) camino.unshift({ d: de.get(k)[0], desde: de.get(k)[1] });
+            return camino;
+          }
+        }
+      }
+      return null;
+    }
     // a qué habitaciones puede ir el que está cargado (el grande no cabe en la pieza del pequeño)
-    const cuartosPosibles = () => CUARTOS.filter((c, i) => i !== 2 || yo.escala < 0.8);
+    const cuartosPosibles = () => CUARTOS.filter((c, i) => (i !== 2 || yo.escala < 0.8) && (i !== PATIO || !PUERTAS[2].cerrada));
     const dentroDelCuarto = (c, x, z) =>
       [limitar(x, [c.x0 + MARGEN, c.x1 - MARGEN]), 0, limitar(z, [c.z0 + MARGEN, c.z1 - MARGEN])];
 
@@ -740,7 +832,7 @@
         Object.assign(mente, { accion: 'huir', mirarA: null, giroForzado: null, saltosPend: 0, tAccion: 5, ruta: [], juego: null });
         // el pequeño a veces se va corriendo a su pieza
         if (yo.escala < 0.8 && Math.random() < 0.4) irA([azarEntre(PIEZA.x0 + MARGEN, PIEZA.x1 - MARGEN), 0, azarEntre(PIEZA.z0 + MARGEN + 100, PIEZA.z1 - MARGEN)]);
-        else mente.meta = dentroDelCuarto(CUARTOS[cuartoDe(pos.x)], pos.x + wx * 450, pos.z + wz * 450);
+        else mente.meta = dentroDelCuarto(CUARTOS[cuartoDe(pos.x, pos.z)], pos.x + wx * 450, pos.z + wz * 450);
         return;
       }
       // borrar solo tiene sentido si hay dibujos; borrar todo, si las paredes están llenas
@@ -755,10 +847,11 @@
       if (o.mente.acostado > 0.5 || o.mente.tirado > 0.5) for (const k of ['jugarCon', 'saludarOtro', 'perseguir']) delete ganas[k];
       if (yo.escala < 0.8) Object.assign(ganas, GANAS_DEL_CHICO);
       // si el otro está donde no puede llegar, no lo busca
-      if (yo.escala >= 0.8 && cuartoDe(o.pos.x) === 2) for (const k of ['jugarCon', 'saludarOtro', 'perseguir', 'molestar', 'empujar']) delete ganas[k];
+      if (yo.escala >= 0.8 && cuartoDe(o.pos.x, o.pos.z) === 2) for (const k of ['jugarCon', 'saludarOtro', 'perseguir', 'molestar', 'empujar']) delete ganas[k];
       // el cuerpo y lo que siente cambian las ganas; y el patio tiene sus propias cosas que hacer
       ajustarGanas(ganas);
-      const patio = ganasPatio();
+      const patio = { ...ganasPatio(), ...ganasCasa() };
+      if (!afuera()) for (const k of TAREAS_AFUERA) delete patio[k];
       Object.assign(ganas, patio);
       const n = mente.nec;
       const comida = Object.fromEntries(Object.entries(patio).filter(([k]) => COMIDA_ACCIONES.includes(k)));
@@ -779,7 +872,7 @@
         mente.aviso = ops[Math.floor(Math.random() * ops.length)]; mente.tAviso = 1.8;
       }
       Object.assign(mente, { accion: a, meta: null, ruta: [], mirarA: null, giroForzado: null, saltosPend: 0, juego: null });
-      const aqui = CUARTOS[cuartoDe(pos.x)];
+      const aqui = CUARTOS[cuartoDe(pos.x, pos.z)];
       switch (a) {
         case 'pasear': {
           // a veces se cambia de habitación
@@ -850,6 +943,9 @@
           mente.tAccion = 35;
           break;
         }
+        case 'cartasJuntos':
+          if (!invitarACartas()) mente.tAccion = 0;
+          break;
         default:
           if (TAREAS[a]) empezarTarea(a);    // las cosas del patio
           else mente.tAccion = 0;
@@ -858,16 +954,15 @@
 
     // Camina a un punto; si está en la otra habitación, pasa primero por la puerta
     function irA(destino) {
-      let a = cuartoDe(pos.x);
-      const b = cuartoDe(destino[0]);
+      const a = cuartoDe(pos.x, pos.z), b = cuartoDe(destino[0], destino[2]);
       mente.ruta = [];
-      // las habitaciones están en fila (patio - 1 - 2 - 3): pasa por cada puerta en el camino
-      while (a !== b) {
-        const sube = ORDEN[b] > ORDEN[a], d = PUERTAS.find(p => sube ? p.a === a : p.b === a);
-        if (!cabeEn(d)) { mente.ruta = []; mente.meta = null; mente.noCabe = true; return; }   // no cabe
-        const zm = (d.z0 + d.z1) / 2, lado = sube ? -1 : 1;
-        mente.ruta.push([d.x + lado * 190, 0, zm], [d.x - lado * 190, 0, zm]);
-        a = sube ? d.b : d.a;
+      // pasa por cada puerta en el camino (si no hay camino: no cabe, o la puerta está cerrada)
+      const camino = caminoDePuertas(a, b);
+      if (!camino) { mente.ruta = []; mente.meta = null; mente.noCabe = true; return; }
+      for (const { d, desde } of camino) {
+        const sm = (d.s0 + d.s1) / 2, dir = desde === d.a ? 1 : -1;
+        const p1 = enPuerta(d, d.f - dir * 190, sm), p2 = enPuerta(d, d.f + dir * 190, sm);
+        mente.ruta.push([p1[0], 0, p1[1]], [p2[0], 0, p2[1]]);
       }
       mente.noCabe = false;
       mente.ruta.push(destino);
@@ -894,8 +989,8 @@
     const enMueble = (x, z) => OBSTACULOS.some(([x0, x1, z0, z1]) => x > x0 - 8 && x < x1 + 8 && z > z0 - 8 && z < z1 + 8);
     function rodear(a, b) {
       if (!bloqueado(a, b)) return [b];
-      const r = cuartoDe(a[0]);
-      if (r !== cuartoDe(b[0])) return [b];
+      const r = cuartoDe(a[0], a[2]);
+      if (r !== cuartoDe(b[0], b[2])) return [b];
       const [zx0, zx1, zz0, zz1] = ZONAS[r];
       const nx = Math.floor((zx1 - zx0) / CELDA) + 1, nz = Math.floor((zz1 - zz0) / CELDA) + 1;
       const celda = (x, z) => [limitar(Math.round((x - zx0) / CELDA), [0, nx - 1]), limitar(Math.round((z - zz0) / CELDA), [0, nz - 1])];
@@ -1026,7 +1121,7 @@
           llegoJugando();
         } else if (mente.accion === 'sentarse') {
           // llegó a la esquina: se sienta mirando hacia el centro de la habitación
-          const c = CUARTOS[cuartoDe(pos.x)];
+          const c = CUARTOS[cuartoDe(pos.x, pos.z)];
           Object.assign(mente, { accion: 'sentado', meta: null, tAccion: azarEntre(6, 11),
                                  giroForzado: Math.atan2((c.x0 + c.x1) / 2 - pos.x, (c.z0 + c.z1) / 2 - pos.z) });
         } else mente.tAccion = 0;
@@ -1081,7 +1176,7 @@
       // para tirar al aro junta 3 o 4 cubos de una vez
       if (tipo === 'encestar' && !mente.juego.carga) Object.assign(mente.juego, { carga: [], quiere: 3 + Math.floor(Math.random() * 2) });
       if (tipo === 'malabares' && !mente.juego.cubos) mente.juego.cubos = [];
-      irA(dentroDelCuarto(CUARTOS[cuartoDe(c.x)], c.x, c.z));
+      irA(dentroDelCuarto(CUARTOS[cuartoDe(c.x, c.z)], c.x, c.z));
       mente.mirarA = null;
       mente.tAccion = 30;
     }
@@ -1092,7 +1187,7 @@
       const libres = cubosLibres(j.tipo).sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
       if (!libres.length) return false;
       Object.assign(j, { fase: 'buscar', cubo: libres[0] });
-      irA(dentroDelCuarto(CUARTOS[cuartoDe(libres[0].x)], libres[0].x, libres[0].z));
+      irA(dentroDelCuarto(CUARTOS[cuartoDe(libres[0].x, libres[0].z)], libres[0].x, libres[0].z));
       return true;
     }
     const alturaTorre = j => Math.max(0, ...CUBOS.filter(c => c.estado !== 'mano' && Math.abs(c.x - j.lugar[0]) < 30 &&
@@ -1101,6 +1196,7 @@
     function llegoJugando() {
       const j = mente.juego, c = j.cubo;
       if (TAREAS[j.tipo]) { llegoTarea(j); return; }
+      if (j.tipo === 'cartas') { llegoACartas(j); return; }
       if (j.tipo === 'pintar') { llegoPintando(j); return; }
       if (j.tipo === 'borrar') { llegoBorrando(j); return; }
       if (j.tipo === 'juguetes') {           // frente al baúl: saca un juguete y juega
@@ -1170,7 +1266,7 @@
         c.estado = 'cabeza'; c.dueno = yo;
         Object.assign(j, { fase: 'equilibrio', t: azarEntre(2.5, 6) });
         mente.aviso = '¡mira, sin manos!'; mente.tAviso = 2;
-        irA(dentroDelCuarto(CUARTOS[cuartoDe(pos.x)], pos.x + azarEntre(-400, 400), pos.z + azarEntre(-400, 400)));
+        irA(dentroDelCuarto(CUARTOS[cuartoDe(pos.x, pos.z)], pos.x + azarEntre(-400, 400), pos.z + azarEntre(-400, 400)));
       }
     }
     // lo que pasa cada cuadro mientras juega
@@ -1181,6 +1277,7 @@
       if (c && !CUBOS.includes(c)) { mente.juego = null; mente.tAccion = 0; return; }   // lo borró el botón azul
       j.t -= dt;
       if (TAREAS[j.tipo]) { haciendoTarea(j, dt); return; }
+      if (j.tipo === 'cartas') { jugandoCartas(j, dt); return; }
       if (TIPOS_CON_OTRO.includes(j.tipo)) { jugandoConOtro(j, dt); return; }
       if (j.tipo === 'juguetes') {
         if (j.fase === 'jugar') {
@@ -1199,7 +1296,7 @@
       if (j.fase === 'apretar' && j.t <= 0) {
         presionar(j.boton);
         Object.assign(j, { fase: 'mirarArriba', t: 0 });
-        if (j.boton.tipo === 'mas') mente.mirarA = [-600, -650, -600];
+        if (j.boton.tipo === 'mas') mente.mirarA = [-600, -650, -600 + DZ_JUEGOS];
         else { mente.mirarA = null; mente.aviso = '¡paredes limpias!'; mente.tAviso = 2; }
         mente.tAccion = 2.6;
       }
@@ -1347,6 +1444,7 @@
       if (e.code === 'Digit0' || e.code === 'Numpad0') { camLibre = true; tPanel = 0; return; }
       if (e.code === 'KeyH') { document.body.classList.toggle('sin-hud'); return; }    // ocultar / mostrar las stats
       if (e.code === 'KeyI') { verDetalle = !verDetalle; tPanel = 0; return; }        // ver lo que piensan
+      if (e.code === 'KeyY') { if (TEMPORAL.estado === 'calma') TEMPORAL.t = 0; return; }   // que se venga un temporal
       if (e.code === 'KeyT') { VEL_TIEMPO = VEL_TIEMPO === 1 ? 3 : VEL_TIEMPO === 3 ? 6 : 1; tPanel = 0; return; }
       if (TECLAS_USADAS.includes(e.code)) {
         teclas.add(e.code);
@@ -1530,7 +1628,9 @@
       const miedoCam = mente.miedos['la cámara'] || 0;
       const nota = mente.conciencia > 0.3 && (yo.distCam ?? 999) < 240 + 260 * miedoCam;
       mente.susto = suavizar(mente.susto, nota ? 1 : 0, 6, dt);
-      mente.sentado = suavizar(mente.sentado, mente.accion === 'sentado' ? 1 : 0, 4, dt);
+      const enSilla = !!(mente.juego && mente.juego.tipo === 'cartas' && mente.juego.sentado);
+      mente.sentado = suavizar(mente.sentado, mente.accion === 'sentado' || enSilla ? 1 : 0, 4, dt);
+      mente.silla = suavizar(mente.silla || 0, enSilla ? 1 : 0, 6, dt);
       mente.tParpadeo -= dt;
       if (mente.tParpadeo <= 0) { mente.parpadeando = 0.15; mente.tParpadeo = azarEntre(2, 5.5); }
       mente.parpadeando = Math.max(0, mente.parpadeando - dt);
@@ -1651,11 +1751,13 @@
     // Marco de la puerta: se ve de los dos lados
     const MARCO = 16, GROSOR_MURO = 34;
     for (const d of PUERTAS) {
-      const col = d.soloChico ? '#4f7fb5' : MADERA_OSCURA;
+      const col = d.soloChico ? '#4f7fb5' : MADERA_OSCURA, g = GROSOR_MURO / 2;
+      // una caja dada en (f, s) de la puerta
+      const cajaP = (f0, f1, y0, y1, s0, s1) => d.eje === 'x' ? caja(f0, f1, y0, y1, s0, s1, col) : caja(s0, s1, y0, y1, f0, f1, col);
       mueble(null,
-        caja(d.x - GROSOR_MURO / 2, d.x + GROSOR_MURO / 2, 0, d.alto + MARCO, d.z0 - MARCO, d.z0, col),
-        caja(d.x - GROSOR_MURO / 2, d.x + GROSOR_MURO / 2, 0, d.alto + MARCO, d.z1, d.z1 + MARCO, col),
-        caja(d.x - GROSOR_MURO / 2, d.x + GROSOR_MURO / 2, d.alto, d.alto + MARCO, d.z0, d.z1, col));
+        cajaP(d.f - g, d.f + g, 0, d.alto + MARCO, d.s0 - MARCO, d.s0),
+        cajaP(d.f - g, d.f + g, 0, d.alto + MARCO, d.s1, d.s1 + MARCO),
+        cajaP(d.f - g, d.f + g, d.alto, d.alto + MARCO, d.s0, d.s1));
     }
 
     // Cama (habitación 2): cabecera contra la pared del fondo a la derecha
@@ -1671,14 +1773,15 @@
     let ACOSTADO = { x: CAMA.x0 + 22, z: (CAMA.z0 + CAMA.z1) / 2, altura: CAMA.colchon + 70 };   // cómo queda en la cama
 
     // Aro (habitación principal), en la pared del fondo. Hueco cuadrado de 100 (los cubos miden 50)
-    const ARO = { x: -250, alto: 430, z: -625, hueco: 100, barra: 9 };
+    const ARO = { x: -250, alto: 430, z: -625 + DZ_JUEGOS, hueco: 100, barra: 9 };   // en la sala de juegos
     const PUNTO_TIRO = [ARO.x, 0, ARO.z + 300];   // desde dónde lanza
     {
       const h = ARO.hueco / 2, b = ARO.barra, y0 = ARO.alto - b, y1 = ARO.alto, NAR = '#e0662b';
-      mueble(0,
-        caja(ARO.x - 125, ARO.x + 125, 370, 570, -700, -686, '#f6f3ec'),   // tablero
-        caja(ARO.x - 55, ARO.x + 55, 432, 522, -686, -684, '#d0533f'),     // cuadro rojo
-        caja(ARO.x - 46, ARO.x + 46, 441, 513, -684, -683, '#f6f3ec'),
+      const W = CUARTOS[JUEGOS].z0;   // la pared del fondo de la sala de juegos
+      mueble(JUEGOS,
+        caja(ARO.x - 125, ARO.x + 125, 370, 570, W, W + 14, '#f6f3ec'),   // tablero
+        caja(ARO.x - 55, ARO.x + 55, 432, 522, W + 14, W + 16, '#d0533f'),     // cuadro rojo
+        caja(ARO.x - 46, ARO.x + 46, 441, 513, W + 16, W + 17, '#f6f3ec'),
         caja(ARO.x - h - b, ARO.x + h + b, y0, y1, ARO.z + h, ARO.z + h + b, NAR),     // aro: adelante
         caja(ARO.x - h - b, ARO.x + h + b, y0, y1, ARO.z - h - b, ARO.z - h, NAR),     //      atrás
         caja(ARO.x - h - b, ARO.x - h, y0, y1, ARO.z - h, ARO.z + h, NAR),             //      lados
@@ -1690,7 +1793,7 @@
     const CUBOS_INICIO = [
       ['#e5533d', -640, 0, -640], ['#f2b33d', -585, 0, -640], ['#4f8fd8', -640, 0, -585],
       ['#5dbb6a', -585, 0, -585], ['#9b6bd3', -612, 50, -612], ['#f08a3c', -520, 0, -640],
-    ];
+    ].map(([c, x, y, z]) => [c, x, y, z + DZ_JUEGOS]);   // en una esquina de la sala de juegos
     const COLORES_CUBO = ['#e5533d', '#f2b33d', '#4f8fd8', '#5dbb6a', '#9b6bd3', '#f08a3c', '#e86fa8', '#41b8b0'];
     const MAX_CUBOS = 30;
     const nuevoCubo = (color, x, y, z, giro = 0) => ({ color, x, y, z, vx: 0, vy: 0, vz: 0, giro, vuelta: 0, estado: 'suelo' });
@@ -1700,23 +1803,24 @@
     // rojo: caen más cubos del techo en esa esquina · azul: deja solo los cubos del principio
     // morado (junto a la mesita): borra todos los dibujos de las paredes
     const BOTONES = [
-      { tipo: 'mas', pared: 'izq', z: -420, color: '#e04a3a', hundido: 0 },
-      { tipo: 'reiniciar', pared: 'izq', z: -300, color: '#3f7fe0', hundido: 0 },
+      { tipo: 'mas', pared: 'izq', z: -420 + DZ_JUEGOS, color: '#e04a3a', hundido: 0 },
+      { tipo: 'reiniciar', pared: 'izq', z: -300 + DZ_JUEGOS, color: '#3f7fe0', hundido: 0 },
       { tipo: 'borrarTodo', pared: 'fondo', x: 560, color: '#8e4fd0', hundido: 0 },
     ];
     for (const b of BOTONES) {
       // dónde se para él para apretarlo, y hacia dónde mira
-      if (b.pared === 'izq') { b.pie = [CUARTOS[0].x0 + MARGEN, 0, b.z]; b.giro = -Math.PI / 2; b.punto = [CUARTOS[0].x0, -140, b.z]; }
-      else { b.pie = [b.x, 0, CUARTOS[0].z0 + MARGEN]; b.giro = Math.PI; b.punto = [b.x, -140, CUARTOS[0].z0]; }
+      const SJ = CUARTOS[JUEGOS];   // están en la sala de juegos
+      if (b.pared === 'izq') { b.pie = [SJ.x0 + MARGEN, 0, b.z]; b.giro = -Math.PI / 2; b.punto = [SJ.x0, -140, b.z]; }
+      else { b.pie = [b.x, 0, SJ.z0 + MARGEN]; b.giro = Math.PI; b.punto = [b.x, -140, SJ.z0]; }
     }
     function carasBoton(b) {
       const sale = 8 + 14 * (1 - 0.7 * b.hundido);
       if (b.pared === 'izq') {
-        const x = CUARTOS[0].x0;
+        const x = CUARTOS[JUEGOS].x0;
         return [...caja(x, x + 8, 100, 180, b.z - 36, b.z + 36, '#ece6da'),
                 ...caja(x + 8, x + sale, 122, 158, b.z - 20, b.z + 20, b.color)];
       }
-      const z = CUARTOS[0].z0;
+      const z = CUARTOS[JUEGOS].z0;
       return [...caja(b.x - 36, b.x + 36, 100, 180, z, z + 8, '#ece6da'),
               ...caja(b.x - 20, b.x + 20, 122, 158, z + 8, z + sale, b.color)];
     }
@@ -1725,7 +1829,7 @@
       if (b.tipo === 'mas') {
         for (let i = 0; i < 5 && CUBOS.length < MAX_CUBOS; i++)
           CUBOS.push(nuevoCubo(COLORES_CUBO[Math.floor(Math.random() * COLORES_CUBO.length)],
-                               azarEntre(-660, -470), azarEntre(560, 720) + i * 60, azarEntre(-660, -470), azarEntre(0, 90)));
+                               azarEntre(-660, -470), azarEntre(560, 720) + i * 60, azarEntre(-660, -470) + DZ_JUEGOS, azarEntre(0, 90)));
       } else if (b.tipo === 'reiniciar') {
         for (const pj of PJS) conPersonaje(pj, () => { if (mente.juego) { soltarCubo(); mente.tAccion = 0; } });
         CUBOS.length = 0;
@@ -1740,19 +1844,21 @@
       for (const pj of PJS) pj.cercaPuerta = false;
       for (const d of PUERTAS) {
         const h = d.hoja;
-        const cerca = PJS.filter(pj => Math.abs(pj.pos.x - d.x) < 290 && Math.abs(pj.pos.z - (d.z0 + d.z1) / 2) < 260 &&
-                                       (!d.soloChico || pj.escala < 0.8));
+        const cerca = PJS.filter(pj => (!d.cerrada || cuartoDe(pj.pos.x, pj.pos.z) === PATIO) && Math.abs(fDe(d, pj.pos.x, pj.pos.z) - d.f) < 290 &&
+                                       Math.abs(sDe(d, pj.pos.x, pj.pos.z) - (d.s0 + d.s1) / 2) < 260 && (!d.soloChico || pj.escala < 0.8));
         h.cerca = cerca.length > 0;
         for (const pj of cerca) pj.cercaPuerta = true;
-        if (h.ang < 3 && h.cerca) h.lado = cerca[0].pos.x < d.x ? 1 : -1;
+        // se abre hacia el lado contrario de donde viene
+        if (h.ang < 3 && h.cerca) h.lado = (fDe(d, cerca[0].pos.x, cerca[0].pos.z) < d.f ? 1 : -1) * (d.eje === 'x' ? 1 : -1);
         const meta = h.cerca ? 88 : 0;
         h.v += (60 * (meta - h.ang) - 11 * h.v) * dt;
         h.ang = limitar(h.ang + h.v * dt, [0, 92]);
       }
     }
     function carasPuerta(d) {
-      const h = d.hoja, ancho = d.z1 - d.z0, chica = d.soloChico;
-      const m = new DOMMatrix().translate(d.x, 0, d.z0).rotate(0, h.ang * h.lado, 0);
+      const h = d.hoja, ancho = d.s1 - d.s0, chica = d.soloChico;
+      const [hx, hz] = enPuerta(d, d.f, d.s0);
+      const m = new DOMMatrix().translate(hx, 0, hz).rotate(0, (d.eje === 'x' ? 0 : 90) + h.ang * h.lado, 0);
       const color = chica ? '#7fb3e0' : '#b4865c', manilla = chica ? 140 : 200;
       const caras = [
         ...caja(-6, 6, 0, d.alto - 4, 2, ancho - 2, color),
@@ -1760,7 +1866,7 @@
         ...caja(-16, -6, manilla, manilla + 14, ancho - (chica ? 30 : 45), ancho - (chica ? 18 : 30), '#d9b45a'),
         ...(chica ? [...caja(6, 8, 200, 250, 30, 90, '#f2c94c'), ...caja(-8, -6, 200, 250, 30, 90, '#f2c94c')] : []),   // una estrella... o casi
       ];
-      return { m, caras, cuarto: h.ang > 3 ? (h.lado > 0 ? d.b : d.a) : null };
+      return { m, caras, cuarto: h.ang > 3 ? ((d.eje === 'x' ? h.lado > 0 : h.lado < 0) ? d.b : d.a) : null };
     }
 
     // ---- Física de los cubos ----
@@ -1850,7 +1956,7 @@
           }
         }
         // no atraviesan las paredes
-        const r = CUARTOS[cuartoDe(c.x)];
+        const r = CUARTOS[cuartoDe(c.x, c.z)];
         if (c.x < r.x0 + h) { c.x = r.x0 + h; c.vx = Math.abs(c.vx) * 0.4; }
         if (c.x > r.x1 - h) { c.x = r.x1 - h; c.vx = -Math.abs(c.vx) * 0.4; }
         if (c.z < r.z0 + h) { c.z = r.z0 + h; c.vz = Math.abs(c.vz) * 0.4; }
@@ -2095,7 +2201,7 @@
       if (mente.susto > 0.5) mirarA = 'camara';
       if (mente.dedo > 0) mirarA = mente.dedoA === 'otro' ? { pj: otroDe(yo) } : 'camara';   // mira a quien le saca el dedo
       const blanco = mirarA === 'camara' ? ojo
-                   : mirarA === 'lampara' ? aLocal(CUARTOS[cuartoDe(pos.x)].luz)
+                   : mirarA === 'lampara' ? aLocal(CUARTOS[cuartoDe(pos.x, pos.z)].luz)
                    : Array.isArray(mirarA) ? aLocal(mirarA)
                    : mirarA && mirarA.color ? aLocal([mirarA.x, -mirarA.y - LADO_CUBO / 2, mirarA.z])
                    : mirarA && mirarA.pj ? aLocal(mirarA.pj.cabezaMundo || [mirarA.pj.pos.x, -200, mirarA.pj.pos.z])
@@ -2158,7 +2264,7 @@
       const resp = Math.sin(reloj * ritmo);
       cuerpoY = -resp * hondo * (1 - fuerzaPaso)
               - Math.abs(Math.cos(fasePaso)) * 4 * fuerzaPaso
-              + mente.sentado * 24;
+              + mente.sentado * 24 - mente.silla * 34;   // en la silla queda más arriba
 
       // Brazos
       enElAire = suavizar(enElAire, altura > 0 ? 1 : 0, 10, dt);
@@ -2295,7 +2401,7 @@
             .map(p => ({ esquinas: p.pts, normal: p.n, rgb: p.rgb, bordes: p.bordes }));
           colocar(pelito, E(pose.mCabeza).translate(dx, 0, 0), 1, lista, null, 'cabeza');
         }
-        for (let i = desde; i < lista.length; i++) { lista[i].pj = yo; lista[i].cuarto = cuartoDe(pos.x); }
+        for (let i = desde; i < lista.length; i++) { lista[i].pj = yo; lista[i].cuarto = cuartoDe(pos.x, pos.z); }
       });
 
       // Los objetos de la casa
@@ -2308,15 +2414,18 @@
       // la hoja de la puerta, cerrada, desaparece junto con su pared cuando esa pared se esconde
       // la hoja de cada puerta, cerrada, desaparece junto con su pared cuando esa pared se esconde
       PUERTAS.forEach((d, i) => {
-        const pu = carasPuerta(d), ladoCam = ojo[0] < d.x ? 'a' : 'b';
+        const pu = carasPuerta(d), ladoCam = fDe(d, ojo[0], ojo[2]) < d.f ? 'a' : 'b';
         if (!(d.hoja.ang < 45 && paredOculta[i][ladoCam])) ponerObjeto(pu.caras, pu.m, pu.cuarto, null);
       });
-      for (const c of CUBOS) { const cu = carasCubo(c); ponerObjeto(cu.caras, cu.m, cuartoDe(c.x), c); }
-      for (const b of BOTONES) ponerObjeto(carasBoton(b), null, 0, b);
-      for (const pl of PLUMONES) ponerObjeto(carasPlumon(pl), null, 0, null);
-      ponerObjeto(carasGoma(), null, 0, null);
+      for (const c of CUBOS) { const cu = carasCubo(c); ponerObjeto(cu.caras, cu.m, cuartoDe(c.x, c.z), c); }
+      for (const b of BOTONES) ponerObjeto(carasBoton(b), null, JUEGOS, b);
+      for (const pl of PLUMONES) ponerObjeto(carasPlumon(pl), null, JUEGOS, null);
+      ponerObjeto(carasGoma(), null, JUEGOS, null);
       // el patio (si la cámara está en otra parte de la casa no se ve, así que no se dibuja)
-      const camCuarto = cuartoDe(ojo[0]), verPatio = camCuarto === PATIO || camCuarto === 0;
+      // (si la cámara quedó fuera de la casa, se ve todo desde afuera)
+      const camDentro = CUARTOS.some(c => ojo[0] >= c.x0 && ojo[0] < c.x1 && ojo[2] >= c.z0 && ojo[2] < c.z1);
+      const camCuarto = cuartoDe(ojo[0], ojo[2]), verPatio = !camDentro || [PATIO, 0, JUEGOS, ALMACEN].includes(camCuarto);   // (desde las piezas de la derecha no se alcanza a ver)
+      document.body.classList.toggle('adentro', camDentro && camCuarto !== PATIO);
       dibujarPatio(ponerObjeto, verPatio);
 
       // Solo las caras que miran a la cámara (las de atrás quedan tapadas igual)
@@ -2557,18 +2666,19 @@
     // queda entre la cámara y esa habitación)
     function recorteDePuerta(i, camara, cx, cy, c) {
       const d = PUERTAS[i], X = c[0], Y = -c[1], Z = c[2];
-      const ladoCam = X < d.x ? 'a' : 'b';
+      const ladoCam = fDe(d, X, Z) < d.f ? 'a' : 'b';
       if (paredOculta[i][ladoCam]) return null;           // esa cara del muro está escondida: se ve todo
       // si la cámara está dentro de la habitación pegada a ese muro, solo se ve lo que asoma por la
       // puerta; si no, se ve todo menos lo que tapa el muro
       const cr = CUARTOS[ladoCam === 'a' ? d.a : d.b];
       const adentro = X > cr.x0 && X < cr.x1 && Z > cr.z0 && Z < cr.z1 && Y < ALTO_CUARTO;
-      const piezas = adentro ? [[d.z0, d.z1, 0, d.alto]]
-        : [[d.zMin, d.z0, 0, ALTO_CUARTO], [d.z1, d.zMax, 0, ALTO_CUARTO], [d.z0, d.z1, d.alto, ALTO_CUARTO]];
+      const piezas = adentro ? [[d.s0, d.s1, 0, d.alto]]
+        : [[d.sMin, d.s0, 0, ALTO_CUARTO], [d.s1, d.sMax, 0, ALTO_CUARTO], [d.s0, d.s1, d.alto, ALTO_CUARTO]];
+      const P = (y, s) => d.eje === 'x' ? [d.f, -y, s] : [s, -y, d.f];
       const camino = new Path2D();
       if (!adentro) camino.rect(-10, -10, innerWidth + 20, innerHeight + 20);
       for (const [a0, a1, y0, y1] of piezas) {
-        let q = [[d.x, -y0, a0], [d.x, -y0, a1], [d.x, -y1, a1], [d.x, -y1, a0]].map(p => aplicar(camara, p));
+        let q = [P(y0, a0), P(y0, a1), P(y1, a1), P(y1, a0)].map(p => aplicar(camara, p));
         q = recortar(q, p => PERSPECTIVA - 5 - p[2]);    // lo que queda detrás de la cámara no se proyecta
         if (q.length < 3) continue;
         q.forEach(([X, Y, Z], i) => { const f = PERSPECTIVA / (PERSPECTIVA - Z); camino[i ? 'lineTo' : 'moveTo'](cx + X * f, cy + Y * f); });
@@ -2579,14 +2689,11 @@
     function recortesDeCuartos(camara, cx, cy) {
       const w = camara.inverse().transformPoint(new DOMPoint(0, 0, PERSPECTIVA));
       const c = [w.x / w.w, w.y / w.w, w.z / w.w];
-      const rc = cuartoDe(c[0]);
+      const rc = cuartoDe(c[0], c[2]);
       return CUARTOS.map((_, r) => {
+        // los muros con puerta que quedan entre la habitación de la cámara y la habitación r
         const lista = [];
-        for (let i = 0; i < PUERTAS.length; i++) {
-          const d = PUERTAS[i];
-          // ¿ese muro queda entre la habitación de la cámara y la habitación r?
-          if ((Math.min(ORDEN[rc], ORDEN[r]) <= ORDEN[d.a] && Math.max(ORDEN[rc], ORDEN[r]) >= ORDEN[d.b])) { const k = recorteDePuerta(i, camara, cx, cy, c); if (k) lista.push(k); }
-        }
+        for (const { d } of caminoDePuertas(rc, r, () => true, false) || []) { const k = recorteDePuerta(PUERTAS.indexOf(d), camara, cx, cy, c); if (k) lista.push(k); }
         return lista.length ? lista : null;
       });
     }
@@ -2596,10 +2703,10 @@
     //  PINTAR: una mesita con plumones; toma uno a la vez y dibuja en las
     //  paredes de la habitación principal lo que se le ocurra
     // =====================================================================
-    const MESITA = { x0: 250, x1: 430, z0: -580, z1: -460, alto: 105 };
+    const MESITA = { x0: 250, x1: 430, z0: -580 + DZ_JUEGOS, z1: -460 + DZ_JUEGOS, alto: 105 };   // en la sala de juegos
     {
       const { x0, x1, z0, z1, alto } = MESITA, p = 12;
-      mueble(0,
+      mueble(JUEGOS,
         caja(x0, x1, alto - 14, alto, z0, z1, MADERA),                       // cubierta
         caja(x0 + 6, x0 + 6 + p, 0, alto - 14, z0 + 6, z0 + 6 + p, MADERA_OSCURA),   // patas
         caja(x1 - 6 - p, x1 - 6, 0, alto - 14, z0 + 6, z0 + 6 + p, MADERA_OSCURA),
@@ -2650,14 +2757,16 @@
     }
     // lugares de la pared donde no conviene dibujar (el aro y los botones)
     const ZONAS_OCUPADAS = [
-      { eje: 'x', fijo: -700, s0: ARO.x - 160, s1: ARO.x + 160 },
-      { eje: 'z', fijo: -700, s0: BOTONES[0].z - 90, s1: BOTONES[1].z + 90 },
+      { eje: 'x', fijo: CUARTOS[JUEGOS].z0, s0: ARO.x - 160, s1: ARO.x + 160 },
+      { eje: 'x', fijo: CUARTOS[JUEGOS].z0, s0: BOTONES[2].x - 90, s1: BOTONES[2].x + 90 },
+      { eje: 'z', fijo: CUARTOS[JUEGOS].x0, s0: BOTONES[0].z - 90, s1: BOTONES[1].z + 90 },
     ];
     // Elige dónde dibujar: un lugar libre al que pueda llegar
     function elegirLugar(ancho) {
       for (let intento = 0; intento < 40; intento++) {
         // prefiere las paredes que se ven (la de adelante casi siempre es la "cuarta pared")
-        const pesos = yo.escala < 0.8 ? { 0: 0.3, 1: 0.1, 2: 0.25, 3: 0.45 } : { 0: 0.45, 1: 0.15, 2: 0.4 };
+        // (0: fondo de la sala de juegos, 1 y 2: sus costados, 3: la pared de la pieza del pequeño)
+        const pesos = yo.escala < 0.8 ? { 0: 0.3, 1: 0.15, 2: 0.15, 3: 0.4 } : { 0: 0.45, 1: 0.3, 2: 0.25 };
         const p = PAREDES_PINTABLES[+elegir(pesos)];
         const s = azarEntre(p.a0 + MARGEN + ancho / 2, p.a1 - MARGEN - ancho / 2);
         const pie = p.paraPararse(s);
@@ -2689,8 +2798,8 @@
     // (se arma la primera vez que se usa: algunas cosas del patio se definen más abajo)
     let NOMBRADOS_ = null;
     const nombrados = () => NOMBRADOS_ || (NOMBRADOS_ = [
-      ['la cama', 1, [1250, 1696, -690, -380]], ['el aro', 0, [ARO.x - 125, ARO.x + 125, -700, ARO.z + 60]],
-      ['la mesita', 0, [MESITA.x0, MESITA.x1, MESITA.z0, MESITA.z1]], ['la camita', 2, [2110, 2396, 130, 350]],
+      ['la cama', 1, [1250, 1696, -690, -380]], ['el aro', JUEGOS, [ARO.x - 125, ARO.x + 125, CUARTOS[JUEGOS].z0, ARO.z + 60]],
+      ['la mesita', JUEGOS, [MESITA.x0, MESITA.x1, MESITA.z0, MESITA.z1]], ['la camita', 2, [2110, 2396, 130, 350]],
       ['el baúl', 2, [1876, 2024, 104, 194]], ['la repisa', 2, [1730, 1850, 104, 150]], ['el puf', 2, [2160, 2240, 580, 660]],
       ['el gallinero', PATIO, [-1885, -1715, -665, -515]], ['el nido', PATIO, [NIDO.x0, NIDO.x1, NIDO.z0, NIDO.z1]],
       ['el saco', PATIO, [SACO.x0 - 4, SACO.x1 + 4, SACO.z0 - 4, SACO.z1 + 4]], ['la llave', PATIO, [LLAVE_X - 14, LLAVE_X + 14, -700, -660]],
@@ -2707,9 +2816,9 @@
 
     // ---- Mirar alrededor: recuerda lo que ve (y cuántas veces lo ha visto) ----
     function mirarAlrededor() {
-      const r = cuartoDe(pos.x), fx = Math.sin(orientacion), fz = Math.cos(orientacion);
+      const r = cuartoDe(pos.x, pos.z), fx = Math.sin(orientacion), fz = Math.cos(orientacion);
       const ver = (clave, tipo, ref, x, z) => {
-        if (cuartoDe(x) !== r) return;
+        if (cuartoDe(x, z) !== r) return;
         const dx = x - pos.x, dz = z - pos.z, d = Math.hypot(dx, dz);
         if (d > 1100 || (d > 160 && (dx * fx + dz * fz) / d < -0.3)) return;   // lo que tiene detrás no lo ve
         const v = mente.vistos[clave] || (mente.vistos[clave] = { veces: 0 });
@@ -3344,7 +3453,7 @@
           // da unos pasos atrás para mirar lo que hizo
           const p = j.lugar.pared.paraPararse(j.lugar.s);
           j.fase = 'alejarse';
-          irA(dentroDelCuarto(CUARTOS[cuartoDe(p[0])], p[0] + (pared.eje === 'z' ? pared.normal * 230 : 0), p[2] + (pared.eje === 'x' ? pared.normal * 230 : 0)));
+          irA(dentroDelCuarto(CUARTOS[cuartoDe(p[0], p[2])], p[0] + (pared.eje === 'z' ? pared.normal * 230 : 0), p[2] + (pared.eje === 'x' ? pared.normal * 230 : 0)));
         }
       }
     }
@@ -3385,25 +3494,32 @@
       plano(k('techo'), an, fo, `translate3d(${cx}px, ${-H}px, ${cz}px) rotateX(-90deg)`);
       if (i === PATIO) plano('lampara sol', 260, 260, `translate3d(${cx}px, ${-H + 1}px, ${cz}px) rotateX(-90deg)`);
       else plano('lampara', 90, 90, `translate3d(${cx}px, ${-H + 1}px, ${cz}px) rotateX(-90deg)`);
-      const atras = pared(k('pared'), 'x', c.z0, c.x0, c.x1, 0, H, 1);
-      const adelante = pared(k('pared'), 'x', c.z1, c.x0, c.x1, 0, H, -1);
-      // en la habitación principal se puede pintar en las paredes enteras
-      if (i === 0) { hacerPintable(atras, 'x', c.z0, c.x0, c.x1, 1); hacerPintable(adelante, 'x', c.z1, c.x0, c.x1, -1); }
+      // pared de atrás y de adelante: pueden tener puerta (eje 'z' en las puertas)
+      const muroZ = (z, n) => {
+        const d = PUERTAS.find(p => p.eje === 'z' && p.f === z && p.s0 >= c.x0 && p.s1 <= c.x1);
+        if (!d) return pared(k('pared'), 'x', z, c.x0, c.x1, 0, H, n);
+        pared(k('pared'), 'x', z, c.x0, d.s0, 0, H, n);
+        pared(k('pared'), 'x', z, d.s1, c.x1, 0, H, n);
+        pared(k('pared'), 'x', z, d.s0, d.s1, d.alto, H, n);
+        return null;
+      };
+      const atras = muroZ(c.z0, 1);
+      muroZ(c.z1, -1);
+      // en la sala de juegos se puede pintar en la pared del fondo
+      if (i === JUEGOS) hacerPintable(atras, 'x', c.z0, c.x0, c.x1, 1);
       if (i === 2) paredesTarde.push([atras, 'x', c.z0, c.x0, c.x1, 1]);   // la pared del fondo de su pieza (va al final)
       // paredes de los costados: la que da a la otra habitación tiene la puerta
       for (const [x, n] of [[c.x0, 1], [c.x1, -1]]) {
-        const d = PUERTAS.find(p => p.x === x && p.z0 >= c.z0 && p.z1 <= c.z1);
+        const d = PUERTAS.find(p => p.eje === 'x' && p.f === x && p.s0 >= c.z0 && p.s1 <= c.z1);
         // desde el patio, el muro con la puerta es el de afuera de la casa
         const clase = i === PATIO && d ? 'pared fachada' : k('pared');
         if (d) {
           const tramo = pared(clase, 'z', x, c.z0, d.z0, 0, H, n);
           pared(clase, 'z', x, d.z1, c.z1, 0, H, n);
           pared(clase, 'z', x, d.z0, d.z1, d.alto, H, n);
-          // en la principal, el tramo largo junto a los botones se sigue pudiendo pintar
-          if (i === 0 && x === c.x0) hacerPintable(tramo, 'z', x, c.z0, d.z0, n);
         } else {
           const lado = pared(k('pared'), 'z', x, c.z0, c.z1, 0, H, n);
-          if (i === 0) hacerPintable(lado, 'z', x, c.z0, c.z1, n);
+          if (i === JUEGOS) hacerPintable(lado, 'z', x, c.z0, c.z1, n);   // y en sus dos costados
         }
       }
     });
@@ -3422,8 +3538,11 @@
         const delante = punto(s.normal, restar(cam, s.punto)) > 0;
         const tapa = delante && punto(s.normal, restar(quien, s.punto)) < 0;
         const v = tapa ? 'hidden' : '';
-        const pi = PUERTAS.findIndex(d => d.x === s.punto[0]);
-        if (tapa && pi >= 0 && s.normal[0]) paredOculta[pi][s.normal[0] < 0 ? 'a' : 'b'] = true;
+        // ¿es un muro con puerta? (mismo muro y dentro de lo que abarcan sus dos habitaciones)
+        const pi = PUERTAS.findIndex(d => d.eje === 'x'
+          ? s.normal[0] && s.punto[0] === d.f && s.punto[2] >= d.sMin && s.punto[2] <= d.sMax
+          : s.normal[2] && s.punto[2] === d.f && s.punto[0] >= d.sMin && s.punto[0] <= d.sMax);
+        if (tapa && pi >= 0) paredOculta[pi][(PUERTAS[pi].eje === 'x' ? s.normal[0] : s.normal[2]) < 0 ? 'a' : 'b'] = true;
         if (s.el.style.visibility !== v) s.el.style.visibility = v;
       }
     }
@@ -3549,6 +3668,7 @@
     Object.assign(GRANDE.mente, { habDibujo: 0.35, habEscribir: 0.5 });
     Object.assign(CHICO.mente, { habDibujo: 0.05, habEscribir: 0 });
     // cuánto cree cada uno que hay que dejar el huevo en el sartén: el paciente lo deja de más, el impaciente de menos
+    for (const pj of [GRANDE, CHICO]) Object.assign(pj.mente, { reservaComida: 1 + pj.pers.cuidado * 2, temporales: 0, habCartas: pj === GRANDE ? 0.2 : 0 });
     for (const pj of [GRANDE, CHICO]) Object.assign(pj.mente, { tiempoFrito: 1.2 + pj.pers.paciencia * 8 + azarEntre(-0.6, 0.6), habCocina: pj === GRANDE ? 0.1 : 0 });
     GANAS.jugueton = { pasear: 1, brincar: 2, saludar: 0.8, patear: 1.8, lanzar: 1.8, malabares: 1.2, encestar: 1.5,
                        cabeza: 1.2, pintar: 1, boton: 1.2, perseguir: 1, jugarCon: 0.9, molestar: 0.7, saludarOtro: 0.4 };
@@ -3704,8 +3824,9 @@
         if (g.estado === 'muerta') { g.muerta += dt; continue; }
         if (g.estado !== 'viva') continue;   // (en la mano de alguien)
         g.edad = Math.min(1, g.edad + dt / 100);
-        g.hambre = Math.min(1, g.hambre + dt / 150);
-        g.sed = Math.min(1, g.sed + dt / 125);
+        const refugio = TEMPORAL.estado === 'tormenta' ? 0.5 : 1;   // con temporal se quedan quietas en el gallinero (y toman agua de lluvia)
+        g.hambre = Math.min(1, g.hambre + dt / 150 * refugio);
+        g.sed = Math.min(1, g.sed + dt / 125 * (refugio === 1 ? 1 : 0.2));
         g.susto = Math.max(0, g.susto - dt);
         g.picar = Math.max(0, g.picar - dt);
         // saltito (cuando la espantan o la sueltan)
@@ -3785,7 +3906,7 @@
       for (const r of CUIDADOS.filter((r, i, l) => reloj - r.t < 150 && l.findIndex(q => q.pj === r.pj && q.a === r.a && reloj - q.t < 150) === i)) conPersonaje(r.pj, () => {
         aprender(r.a, 0.9, 0.25);
         mente.cuidado = Math.min(1, mente.cuidado + 0.08);
-        if (!mente.sabeHuevos && cuartoDe(pos.x) === PATIO && mente.tAviso <= 0) {
+        if (!mente.sabeHuevos && cuartoDe(pos.x, pos.z) === PATIO && mente.tAviso <= 0) {
           mente.sabeHuevos = true; mente.aviso = '¡si comen, ponen huevos!'; mente.tAviso = 2.4;
         }
       });
@@ -3793,7 +3914,7 @@
     function morirGallina(g, causa) {
       if (g.estado === 'mano' && g.dueno) conPersonaje(g.dueno, () => { if (yo.lleva && yo.lleva.gallina === g) yo.lleva = null; });
       Object.assign(g, { estado: 'muerta', muerta: 0, dueno: null, meta: null, comiendo: 0, y: 0 });
-      anunciar(`murió ${g.nombre} (${causa === 'golpes' ? 'por los golpes' : causa === 'hambre' ? 'de hambre' : 'de sed'})`);
+      anunciar(`murió ${g.nombre} (${causa === 'golpes' ? 'por los golpes' : causa === 'hambre' ? 'de hambre' : causa === 'temporal' ? 'con el temporal' : 'de sed'})`);
       for (const pj of PJS) conPersonaje(pj, () => {
         const cariño = Math.max(0, cosaV(g.nombre)) + Math.max(0, cosaV('las gallinas')) * 0.5;
         mente.emo.tristeza = Math.min(1, mente.emo.tristeza + 0.12 + cariño * 0.7);
@@ -3828,7 +3949,7 @@
       g.salud -= 0.15; g.tHuevo += 20;
       if (g.salud <= 0) { morirGallina(g, 'golpes'); return; }
       for (const pj of PJS) conPersonaje(pj, () => {
-        if (cuartoDe(pos.x) !== PATIO || mente.acostado > 0.5 || mente.dormidoPiso || mente.desmayo) return;
+        if (cuartoDe(pos.x, pos.z) !== PATIO || mente.acostado > 0.5 || mente.dormidoPiso || mente.desmayo) return;
         const cariño = Math.max(0, cosaV(g.nombre)) + Math.max(0, cosaV('las gallinas'));
         mente.conciencia = Math.min(1, mente.conciencia + 0.02);
         if (cariño > 0.2) {
@@ -3852,7 +3973,7 @@
         p.cacareo = 2; p.dice = '¡pío pío!';
         anunciar(`nació un pollito: ${p.nombre}`);
         for (const pj of PJS) conPersonaje(pj, () => {
-          if (cuartoDe(pos.x) !== PATIO) return;
+          if (cuartoDe(pos.x, pos.z) !== PATIO) return;
           mente.emo.alegria = Math.min(1, mente.emo.alegria + 0.3); cosa('las gallinas', 0.1);
           if (mente.tAviso <= 0) { mente.aviso = '¡un pollito!'; mente.tAviso = 2; }
         });
@@ -3873,7 +3994,7 @@
         v.vy -= 1800 * dt; v.x += v.vx * dt; v.y += v.vy * dt; v.z += v.vz * dt;
         const b = v.blanco;
         if (b && Math.hypot(b.pos.x - v.x, b.pos.z - v.z) < 85 * b.escala && v.y < 380 * b.escala) { VUELOS.splice(i, 1); impactoHuevo(v); continue; }
-        const c = CUARTOS[cuartoDe(v.x)];
+        const c = CUARTOS[cuartoDe(v.x, v.z)];
         if (v.y <= 0 || v.z < c.z0 || v.z > c.z1) {
           VUELOS.splice(i, 1);
           mancha(limitar(v.x, [c.x0 + 25, c.x1 - 25]), limitar(v.z, [c.z0 + 25, c.z1 - 25]));
@@ -3901,6 +4022,11 @@
         decir('¡se escapó!');
       } else if (l.que === 'balde') { RECURSOS.baldeEnLlave = true; if (l.lleno) decir('se me cayó el agua'); }
       else if (l.que === 'maiz') decir('se me cayó el maíz');
+      else if (l.que === 'cartas') {
+        for (const c of CARTAS) if ((c.estado === 'mano' || c.estado === 'manoJunta') && c.dueno === yo)
+          Object.assign(c, { estado: 'vuelo', x: m[0], y: -m[1], z: m[2], vx: azarEntre(-200, 200), vz: azarEntre(-200, 200), vy: azarEntre(100, 300), giro: azarEntre(-8, 8), dueno: null, anim: null });
+        decir('¡se me cayeron las cartas!');
+      }
       else decir('se me cayó la comida...');
     }
 
@@ -3917,6 +4043,8 @@
       encestar: 'los cubos', apilar: 'los cubos', malabares: 'los cubos', patear: 'los cubos', lanzar: 'los cubos', cabeza: 'los cubos',
       boton: 'los botones', pintar: 'pintar', borrar: 'pintar', jugarCon: 'el otro', saludarOtro: 'el otro', perseguir: 'el otro',
       juguetes: 'sus juguetes', puf: 'su puf', dormir: 'la cama',
+      cartasJuntos: 'las cartas', piramide: 'las cartas', lanzarCartas: 'las cartas', ordenarCartas: 'las cartas',
+      prepararComida: 'cocinar', comerGuardado: 'la comida guardada',
     };
     // Aprender: cada vez que hace algo le va bien o mal (r de -1 a 1) y lo recuerda
     function aprender(a, r, tasa = 0.35) {
@@ -3967,7 +4095,7 @@
       for (const k of ['brincar', 'jugarCon', 'pintar', 'saludarOtro', 'malabares']) if (g[k]) g[k] *= 1 + e.alegria;
       for (const k of ['patear', 'lanzar']) if (g[k]) g[k] *= 1 + 2 * e.enojo;
       // con rencor, le dan ganas de molestar al otro y no de jugar con él
-      const alcanza = !(yo.escala >= 0.8 && cuartoDe(o.pos.x) === 2) && o.mente.acostado < 0.5 && o.mente.tirado < 0.5;
+      const alcanza = !(yo.escala >= 0.8 && cuartoDe(o.pos.x, o.pos.z) === 2) && o.mente.acostado < 0.5 && o.mente.tirado < 0.5;
       if (alcanza) for (const k of ['molestar', 'empujar']) g[k] = (g[k] || 0) * (1 + e.enojo) + 2.5 * R.otro * R.otro;
       for (const k of ['jugarCon', 'saludarOtro', 'perseguir']) if (g[k]) g[k] *= Math.max(0.05, 1 - 1.5 * R.otro);
       // la cámara: casi no se fija en ella (salvo que ya sepa que está ahí, y no le tenga rencor)
@@ -3979,7 +4107,7 @@
       // y menos lo que le castigaste
       for (const k in mente.castigos) if (g[k]) g[k] *= Math.pow(0.8, mente.castigos[k]);
     }
-    const COMIDA_ACCIONES = ['comerMaiz', 'comerHuevoCrudo', 'cocinarHuevo', 'cocinarGallina'];
+    const COMIDA_ACCIONES = ['comerMaiz', 'comerHuevoCrudo', 'cocinarHuevo', 'cocinarGallina', 'comerGuardado', 'prepararComida'];
     // Cómo ve el corral: cuántas hay comparado con las que quiere, y si se están acabando
     const HISTORIAL_CORRAL = [];
     const cuentaGallinas = () => GALLINAS.filter(g => g.estado !== 'muerta').length;
@@ -3991,11 +4119,11 @@
     function ganasPatio() {
       const w = {}, h = mente.nec.hambre, e = mente.emo, c = conoce;
       const vivas = GALLINAS.filter(g => g.estado === 'viva'), adultas = vivas.filter(g => g.edad >= 1);
-      const huevos = RECURSOS.canasta.length + RECURSOS.nido.length;
+      const huevos = huevosAlAlcance();
       const cariño = Math.max(0, cosaV('las gallinas'));
       const apetito = h * h * 5 * yo.pers.gloton;
       const fuego = 1 - (mente.miedos['el fogón'] || 0) * 0.9;
-      if (RECURSOS.maiz >= 1) w.comerMaiz = (0.03 + apetito * 0.8) * c('comerMaiz');
+      if (fuenteMaiz()) w.comerMaiz = (0.03 + apetito * 0.8) * c('comerMaiz');
       // con hambre, el saco vacío y el comedero de las gallinas lleno: se da cuenta de que el maíz se fue todo para ellas
       if (h > 0.5 && RECURSOS.maiz < 1 && RECURSOS.comedero > 2 && (mente.tNotaMaiz || 0) < reloj) { mente.tNotaMaiz = reloj + 60; sinMaiz(); }
       if (huevos) {
@@ -4025,7 +4153,7 @@
         const preocupa = 1 + C.lleno * 1.5 + C.bajando + (n >= 8 ? 0.8 : 0);
         const hambreG = vivas.reduce((s, g) => s + g.hambre, 0) / vivas.length, sedG = vivas.reduce((s, g) => s + g.sed, 0) / vivas.length;
         // si está en el patio oye a las gallinas reclamando
-        const oye = cuartoDe(pos.x) === PATIO ? 3 : 1;
+        const oye = cuartoDe(pos.x, pos.z) === PATIO ? 3 : 1;
         if (maizParaGallinas() >= 1) w.alimentarGallinas = (0.08 + cuidado * (RECURSOS.comedero < poca ? 1.2 : 0.15) * (0.5 + hambreG) * (hambreG > 0.6 ? oye : 1) * preocupa + (hambreG > 0.6 && RECURSOS.comedero < n * 0.3 ? 1.2 : 0)) * c('alimentarGallinas');
         if (RECURSOS.baldeEnLlave) w.darAgua = (0.06 + cuidado * (RECURSOS.agua < pocaAgua ? 1.1 : 0.1) * (0.5 + sedG) * (sedG > 0.6 ? oye : 1) * preocupa + (sedG > 0.6 && RECURSOS.agua < n * 0.25 ? 1.2 : 0)) * c('darAgua');
       }
@@ -4055,13 +4183,27 @@
     // ---- Las tareas del patio: una lista de pasos (ir a un lugar y hacer algo un rato) ----
     const valor = (v, j) => typeof v === 'function' ? v(j) : v;
     const plantaMadura = () => PLANTAS.filter(p => p.crec >= 1).sort((a, b) => Math.abs(a.x - pos.x) - Math.abs(b.x - pos.x))[0];
-    const dondeHuevo = () => RECURSOS.canasta.length ? 'canasta' : RECURSOS.nido.length ? 'nido' : null;
+    const listaHuevos = f => f === 'huevera' ? ALMACEN_R.huevos : RECURSOS[f];
+    // de dónde saca un huevo: del almacén si está más cerca (o si no se puede salir), si no de la canasta o del nido
+    const dondeHuevo = () => {
+      const ops = [];
+      if (ALMACEN_R.huevos.length) ops.push('huevera');
+      if (afuera()) { if (RECURSOS.canasta.length) ops.push('canasta'); else if (RECURSOS.nido.length) ops.push('nido'); }
+      return ops.sort((a, b) => Math.hypot(LUGAR[a].donde[0] - pos.x, LUGAR[a].donde[2] - pos.z) - Math.hypot(LUGAR[b].donde[0] - pos.x, LUGAR[b].donde[2] - pos.z))[0] || null;
+    };
+    const fuenteMaiz = () => {
+      const ops = [];
+      if (ALMACEN_R.maiz >= 1) ops.push('bin');
+      if (afuera() && RECURSOS.maiz >= 1) ops.push('saco');
+      return ops.sort((a, b) => Math.hypot(LUGAR[a].donde[0] - pos.x, LUGAR[a].donde[2] - pos.z) - Math.hypot(LUGAR[b].donde[0] - pos.x, LUGAR[b].donde[2] - pos.z))[0] || null;
+    };
+    const huevosAlAlcance = () => ALMACEN_R.huevos.length + (afuera() ? RECURSOS.canasta.length + RECURSOS.nido.length : 0);
     const tomarHuevo = {
       antes: j => !!(j.fuente = dondeHuevo()),
       donde: j => LUGAR[j.fuente].donde, giro: j => LUGAR[j.fuente].giro, mirar: j => LUGAR[j.fuente].mirar,
       dur: 1.1, pose: 'agarrar',
       al: j => {
-        const lista = RECURSOS[j.fuente];
+        const lista = listaHuevos(j.fuente);
         if (!lista.length) return false;
         // si ya aprendió que los huevos viejos se pudren, elige el más fresco
         lista.sort((a, b) => mente.sabePodrido ? a.edad - b.edad : b.edad - a.edad);
@@ -4075,8 +4217,16 @@
     //  según cómo le salió. Se equivocan: lo sacan crudo, lo queman, se les cae
     //  al fuego, le queda cáscara, les salta el aceite. Y el otro, si mira, opina.
     // =====================================================================
-    const SARTEN = { x: FOGON.x, z: FOGON.z, huevo: null, reservado: null };
-    const sartenLibre = () => !SARTEN.huevo && (!SARTEN.reservado || SARTEN.reservado.pj === yo || reloj - SARTEN.reservado.t > 45);
+    // Dos sartenes: el del fogón de afuera y el de la cocina de adentro (el único que sirve durante un temporal)
+    const SARTENES = [
+      { lugar: 'fogon', x: FOGON.x, z: FOGON.z, y: 76, cuarto: PATIO, huevo: null, reservado: null, llamarada: 0 },
+      { lugar: 'cocina', x: 560, z: -650, y: 106, cuarto: 0, huevo: null, reservado: null, llamarada: 0 },
+    ];
+    const sartenDisponible = p => !p.huevo && (!p.reservado || p.reservado.pj === yo || reloj - p.reservado.t > 45) && (p.lugar !== 'fogon' || afuera());
+    const sartenLibre = () => SARTENES.some(sartenDisponible);
+    // el más cercano de los que están libres
+    const elegirSarten = () => SARTENES.filter(sartenDisponible).sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z))[0] || null;
+    const enSarten = extra => ({ donde: j => LUGAR[j.sarten.lugar].donde, giro: j => LUGAR[j.sarten.lugar].giro, mirar: j => LUGAR[j.sarten.lugar].mirar, ...extra });
     // cómo queda según cuánto rato estuvo en el sartén
     const puntoDe = t => t < 2.6 ? 'crudo' : t < 3.8 ? 'blandito' : t < 5.6 ? 'perfecto' : t < 7.6 ? 'tostado' : 'quemado';
     const FRITOS = {
@@ -4089,16 +4239,16 @@
     // los pasos: sacar un huevo, cascarlo en el sartén, freírlo el rato que él cree, sacarlo y comérselo (o llevárselo al otro)
     function pasosFreir(paraOtro) {
       return [tomarHuevo,
-        en('fogon', { dur: 1.2, pose: 'fogon', dice: paraOtro ? 'te voy a hacer un huevo' : 'a freír un huevo...', al: j => cascarHuevo(j) }),
-        en('fogon', { dur: j => j.tFreir, pose: 'fogon', cada: (j, dt) => friendo(j, dt), al: j => sacarHuevo(j) }),
+        enSarten({ dur: 1.2, pose: 'fogon', dice: paraOtro ? 'te voy a hacer un huevo' : 'a freír un huevo...', al: j => cascarHuevo(j) }),
+        enSarten({ dur: j => j.tFreir, pose: 'fogon', cada: (j, dt) => friendo(j, dt), al: j => sacarHuevo(j) }),
         paraOtro
           ? { antes: j => { j.o = otroDe(yo); return !!yo.lleva; },
-              donde: j => { const o = j.o, d = distA(o) || 1; return dentroDelCuarto(CUARTOS[cuartoDe(o.pos.x)], o.pos.x + (pos.x - o.pos.x) / d * 170, o.pos.z + (pos.z - o.pos.z) / d * 170); },
+              donde: j => { const o = j.o, d = distA(o) || 1; return dentroDelCuarto(CUARTOS[cuartoDe(o.pos.x, o.pos.z)], o.pos.x + (pos.x - o.pos.x) / d * 170, o.pos.z + (pos.z - o.pos.z) / d * 170); },
               giro: j => Math.atan2(j.o.pos.x - pos.x, j.o.pos.z - pos.z), mirar: j => ({ pj: j.o }), dur: 1.2, pose: 'agarrar', al: j => entregarHuevo(j) }
           : { dur: 2.4, pose: 'comer', dice: 'ñam', al: j => comerFrito(j) }];
     }
     function cascarHuevo(j) {
-      const hab = mente.habCocina, P = yo.pers, h = j.huevo;
+      const hab = mente.habCocina, P = yo.pers, h = j.huevo, SARTEN = j.sarten;
       SARTEN.reservado = { pj: yo, t: reloj };
       yo.lleva = null;
       const error = 0.45 * (1 - hab) * (1.35 - P.cuidado);
@@ -4118,7 +4268,7 @@
       j.tFreir = limitar(t, [1, 14]);
     }
     function friendo(j, dt) {
-      mente.mirarA = [SARTEN.x, -80, SARTEN.z];
+      mente.mirarA = [j.sarten.x, -j.sarten.y, j.sarten.z];
       const P = yo.pers;
       // le salta el aceite
       if (!j.salto && Math.random() < dt * 0.06 * (1 - mente.habCocina) * (1.3 - P.cuidado)) {
@@ -4132,7 +4282,7 @@
       if (!j.dudo && P.paciencia < 0.5 && j.t < j.tFreir * 0.5 && mente.tAviso <= 0) { j.dudo = true; mente.aviso = '¿ya estará?'; mente.tAviso = 1.4; }
     }
     function sacarHuevo(j) {
-      const h = SARTEN.huevo;
+      const SARTEN = j.sarten, h = SARTEN.huevo;
       SARTEN.reservado = null;
       if (!h || h.quien !== yo) return false;
       SARTEN.huevo = null;
@@ -4256,9 +4406,10 @@
     }
     // cada cuadro: el huevo se sigue friendo (aunque nadie lo saque...)
     function moverSarten(dt) {
+      for (const SARTEN of SARTENES) {
       SARTEN.llamarada = Math.max(0, (SARTEN.llamarada || 0) - dt);
       const h = SARTEN.huevo;
-      if (!h) return;
+      if (!h) continue;
       h.t += dt;
       const j = h.quien.mente.juego;
       const atendido = j && (j.tipo === 'cocinarHuevo' || j.tipo === 'cocinarParaOtro');
@@ -4268,22 +4419,572 @@
         conPersonaje(h.quien, () => { mente.tiempoFrito = Math.max(1.2, mente.tiempoFrito - 0.3); });
         errorAlCocinar('olvidado', h.quien);
       }
+      }
     }
     // el sartén y el huevo que se está friendo (va cambiando de color)
-    function carasSarten() {
-      const { x, z } = SARTEN, h = SARTEN.huevo, cs = [];
+    function carasSarten(SARTEN) {
+      const { x, z, y } = SARTEN, h = SARTEN.huevo, cs = [];
       if (h) {
         const t = h.t;
         const clara = t < 1.5 ? '#d9d6cf' : t < 6.2 ? '#fbfaf3' : t < 8.5 ? '#e2c08a' : '#4a3a2c';
         const yema = t < 5.5 ? '#f5b82e' : t < 8.5 ? '#d98c1e' : '#3a2a1c';
-        cs.push(caja(x - 18, x + 16, 76, 77.5, z - 14, z + 17, clara), caja(x - 6, x + 6, 77.5, 81, z - 4, z + 7, yema));
+        cs.push(caja(x - 18, x + 16, y, y + 1.5, z - 14, z + 17, clara), caja(x - 6, x + 6, y + 1.5, y + 5, z - 4, z + 7, yema));
       }
-      if (SARTEN.llamarada > 0) cs.push(caja(x - 20, x + 20, 36, 36 + 70 * SARTEN.llamarada, z - 20, z + 20, '#ff9a3c'));
+      if (SARTEN.llamarada > 0) cs.push(caja(x - 20, x + 20, y - 40, y - 40 + 70 * SARTEN.llamarada, z - 20, z + 20, '#ff9a3c'));
       return sinAbajo(cs);
     }
+    // =====================================================================
+    //  LA PRINCIPAL: una mesa con dos sillas (de frente) y dos mazos de cartas,
+    //  y al lado una cocina para usar adentro lo que juntan.
+    //  EL ALMACÉN: donde guardan huevos, maíz y lo que cocinan para después.
+    //  EL TEMPORAL: a veces se viene una tormenta y no pueden salir al patio;
+    //  se les puede morir el maíz y alguna gallina (o puede no pasar nada).
+    // =====================================================================
+    const MESA = { x: -330, z: -150, x0: -450, x1: -210, z0: -230, z1: -70, alto: 95 };
+    const SILLAS = [{ x: -565, z: -150, giro: Math.PI / 2 }, { x: -95, z: -150, giro: -Math.PI / 2 }];
+    const COCINA = { x0: 250, x1: 660, z0: -700, z1: -590, alto: 100 };
+    const HUEVERA = { x0: -620, x1: -330, z0: 1300, z1: 1392, alto: 150 };
+    const BIN = { x0: 300, x1: 620, z0: 1262, z1: 1392, alto: 90 };
+    const DESPENSA = { x0: -150, x1: 150, z0: 1320, z1: 1392, alto: 130 };
+    {
+      const { x0, x1, z0, z1, alto } = MESA, p = 14;
+      mueble(0,
+        caja(x0, x1, alto - 12, alto, z0, z1, '#9c6b43'),                                    // la mesa
+        caja(x0 + 10, x0 + 10 + p, 0, alto - 12, z0 + 10, z0 + 10 + p, MADERA_OSCURA),
+        caja(x1 - 10 - p, x1 - 10, 0, alto - 12, z0 + 10, z0 + 10 + p, MADERA_OSCURA),
+        caja(x0 + 10, x0 + 10 + p, 0, alto - 12, z1 - 10 - p, z1 - 10, MADERA_OSCURA),
+        caja(x1 - 10 - p, x1 - 10, 0, alto - 12, z1 - 10 - p, z1 - 10, MADERA_OSCURA));
+      for (const s of SILLAS) {
+        const atras = Math.sign(s.x - MESA.x);   // el respaldo, del lado contrario a la mesa
+        mueble(0,
+          caja(s.x - 34, s.x + 34, 40, 50, s.z - 34, s.z + 34, '#b58457'),                  // asiento
+          caja(s.x - 30, s.x - 22, 0, 40, s.z - 30, s.z - 22, MADERA_OSCURA), caja(s.x + 22, s.x + 30, 0, 40, s.z - 30, s.z - 22, MADERA_OSCURA),
+          caja(s.x - 30, s.x - 22, 0, 40, s.z + 22, s.z + 30, MADERA_OSCURA), caja(s.x + 22, s.x + 30, 0, 40, s.z + 22, s.z + 30, MADERA_OSCURA),
+          caja(s.x + atras * 26, s.x + atras * 34, 50, 140, s.z - 34, s.z + 34, '#b58457'));   // respaldo
+      }
+      // la cocina: mueble, cubierta, la cocinilla con su sartén y una olla
+      mueble(0,
+        caja(COCINA.x0, COCINA.x1, 0, COCINA.alto - 6, COCINA.z0, COCINA.z1, '#e8e2d6'),
+        caja(COCINA.x0 - 4, COCINA.x1 + 4, COCINA.alto - 6, COCINA.alto, COCINA.z0, COCINA.z1 + 4, '#7d8288'),
+        caja(470, 650, COCINA.alto, COCINA.alto + 2, -690, -600, '#2c2c30'),                // la placa
+        caja(530, 590, COCINA.alto + 2, COCINA.alto + 6, -680, -620, '#3c3c42'),            // el sartén
+        caja(556, 564, COCINA.alto + 4, COCINA.alto + 6, -620, -575, '#2a2a2e'),
+        caja(285, 355, COCINA.alto, COCINA.alto + 48, -680, -615, '#9aa3ad'),               // la olla
+        caja(COCINA.x0 + 20, COCINA.x0 + 120, 20, 60, COCINA.z1, COCINA.z1 + 2, '#cfc7b8'),  // puertitas
+        caja(COCINA.x0 + 140, COCINA.x0 + 240, 20, 60, COCINA.z1, COCINA.z1 + 2, '#cfc7b8'));
+      // el almacén: la huevera (dos repisas), el cajón del maíz y la despensa
+      const H = HUEVERA, B = BIN, D = DESPENSA;
+      mueble(ALMACEN,
+        caja(H.x0, H.x1, 0, 6, H.z0, H.z1, MADERA_OSCURA), caja(H.x0, H.x1, 60, 66, H.z0, H.z1, MADERA), caja(H.x0, H.x1, 120, 126, H.z0, H.z1, MADERA),
+        caja(H.x0, H.x0 + 8, 0, H.alto, H.z0, H.z1, MADERA_OSCURA), caja(H.x1 - 8, H.x1, 0, H.alto, H.z0, H.z1, MADERA_OSCURA),
+        caja(H.x0, H.x1, 0, H.alto, H.z1 - 6, H.z1, MADERA_OSCURA),
+        caja(B.x0, B.x1, 0, 8, B.z0, B.z1, '#8a6542'),
+        caja(B.x0, B.x0 + 8, 0, B.alto, B.z0, B.z1, '#8a6542'), caja(B.x1 - 8, B.x1, 0, B.alto, B.z0, B.z1, '#8a6542'),
+        caja(B.x0, B.x1, 0, B.alto, B.z0, B.z0 + 8, '#8a6542'), caja(B.x0, B.x1, 0, B.alto, B.z1 - 8, B.z1, '#8a6542'),
+        caja(D.x0, D.x1, 0, 6, D.z0, D.z1, '#6f5137'), caja(D.x0, D.x1, 64, 70, D.z0, D.z1, '#9c7b56'),
+        caja(D.x0, D.x0 + 8, 0, D.alto, D.z0, D.z1, '#6f5137'), caja(D.x1 - 8, D.x1, 0, D.alto, D.z0, D.z1, '#6f5137'),
+        caja(D.x0, D.x1, D.alto - 6, D.alto, D.z0, D.z1, '#6f5137'));
+      OBSTACULOS.push(
+        [MESA.x0 - 80, MESA.x1 + 80, MESA.z0 - 80, MESA.z1 + 80],
+        [COCINA.x0 - 80, COCINA.x1 + 80, -760, COCINA.z1 + 80],
+        [H.x0 - 80, H.x1 + 80, H.z0 - 80, 1500], [B.x0 - 80, B.x1 + 80, B.z0 - 80, 1500], [D.x0 - 80, D.x1 + 80, D.z0 - 80, 1500]);
+    }
+    Object.assign(LUGAR, {
+      cocina:   { donde: [560, 0, -470], giro: Math.PI, mirar: [560, -106, -650] },
+      mesada:   { donde: [330, 0, -470], giro: Math.PI, mirar: [330, -110, -650] },
+      huevera:  { donde: [-475, 0, 1170], giro: 0, mirar: [-475, -90, 1340] },
+      bin:      { donde: [460, 0, 1130], giro: 0, mirar: [460, -80, 1320] },
+      despensa: { donde: [0, 0, 1190], giro: 0, mirar: [0, -70, 1350] },
+      ladoMesa: { donde: [MESA.x, 0, MESA.z1 + 115], giro: Math.PI, mirar: [MESA.x, -MESA.alto, MESA.z] },
+    });
+
+    // ---- Lo que hay guardado en el almacén ----
+    // los huevos ahí se demoran más en pudrirse; el maíz no se moja; las comidas duran, pero no para siempre
+    const ALMACEN_R = { huevos: [], maiz: 0, comidas: [] };
+    const VIDA_COMIDA = { tortilla: 500, huevoDuro: 650, panMaiz: 700 };
+    const RECETAS = {
+      tortilla:   { maiz: 2, huevos: 0, sale: [['tortilla', 1]], dice: 'tortillas de maíz' },
+      huevosDuros:{ maiz: 0, huevos: 2, sale: [['huevoDuro', 2]], dice: 'huevos duros' },
+      panMaiz:    { maiz: 2, huevos: 1, sale: [['panMaiz', 1]], dice: 'pan de maíz' },
+    };
+    const NOMBRE_COMIDA = { tortilla: 'tortilla', huevoDuro: 'huevo duro', panMaiz: 'pan de maíz' };
+    const reservaGuardada = () => ALMACEN_R.huevos.length + Math.floor(ALMACEN_R.maiz / 2) + ALMACEN_R.comidas.length;
+    const afuera = () => TEMPORAL.estado !== 'tormenta';   // ¿se puede salir al patio?
+
+    // ---- El temporal ----
+    const TEMPORAL = { estado: 'calma', t: azarEntre(240, 420), dur: 0, fuerza: 0, rayo: 0, gotas: [] };
+    const elRayo = document.getElementById('rayo');
+    function moverTemporal(dt) {
+      const T = TEMPORAL;
+      T.rayo = Math.max(0, T.rayo - dt);
+      elRayo.style.opacity = T.rayo > 0.25 ? 0.55 : T.rayo > 0.12 ? 0 : T.rayo > 0 ? 0.3 : 0;
+      document.body.classList.toggle('lloviendo', T.estado === 'tormenta');
+      T.t -= dt;
+      if (T.estado === 'calma' && T.t <= 0) {
+        T.estado = 'aviso'; T.t = 22;
+        document.body.classList.add('tormenta');
+        anunciar('se está nublando... se viene un temporal');
+        for (const pj of PJS) conPersonaje(pj, () => {
+          if (mente.acostado > 0.5 || mente.dormidoPiso) return;
+          // el que ya vivió uno sabe lo que viene: se pone a guardar cosas
+          if ((mente.temporales || 0) > 0 && afuera() && autonomo() && Math.random() < 0.5 + yo.pers.cuidado * 0.4) {
+            mente.aviso = 'hay que guardar cosas, rápido'; mente.tAviso = 2;
+            if (!(mente.juego && TAREAS[mente.juego.tipo])) { mente.despues = RECURSOS.canasta.length ? 'guardarHuevos' : 'guardarMaiz'; mente.tAccion = Math.min(mente.tAccion, 0.5); }
+          } else if (mente.tAviso <= 0) { mente.aviso = 'qué nublado está...'; mente.tAviso = 1.8; }
+        });
+      } else if (T.estado === 'aviso' && T.t <= 0) {
+        T.estado = 'tormenta'; T.dur = T.t = azarEntre(60, 120);
+        T.fuerza = Math.random() < 0.3 ? 0 : Math.random() < 0.6 ? 1 : 2;   // 0: no hace nada · 1: leve · 2: fuerte
+        PUERTAS[2].cerrada = true;
+        anunciar('¡temporal! no se puede salir');
+        for (const pj of PJS) conPersonaje(pj, () => {
+          mente.hambreTormenta = mente.nec.hambre; mente.stockAlEmpezar = reservaGuardada();
+          mente.emo.miedo = Math.min(1, mente.emo.miedo + 0.15 * yo.pers.miedoso);
+          // lo que estaba haciendo afuera, lo deja: se entra
+          const enPatio = cuartoDe(pos.x, pos.z) === PATIO;
+          const tareaAfuera = mente.juego && TAREAS[mente.juego.tipo] && mente.juego.pasos.some(p => {
+            const d = valor(p.donde, mente.juego); return d && cuartoDe(d[0], d[2]) === PATIO; });
+          if ((enPatio || tareaAfuera) && mente.acostado < 0.5 && !mente.dormidoPiso && !mente.desmayo) {
+            soltarCubo();
+            Object.assign(mente, { accion: 'huir', juego: null, corre: true, tAccion: 12, mirarA: null, giroForzado: null });
+            irA([-450, 0, 500]);
+            mente.aviso = '¡a la casa!'; mente.tAviso = 1.8;
+          }
+        });
+        for (const g of GALLINAS) if (g.estado === 'viva') { g.meta = [azarEntre(-1700, -1620), azarEntre(-500, -460)]; g.susto = 2; }
+      } else if (T.estado === 'tormenta') {
+        if (Math.random() < dt * 0.12) { T.rayo = 0.35; for (const pj of PJS) conPersonaje(pj, () => {
+          if (Math.random() < yo.pers.miedoso * 0.4) { mente.emo.miedo = Math.min(1, mente.emo.miedo + 0.2); if (mente.tAviso <= 0) { mente.aviso = '¡un trueno!'; mente.tAviso = 1.4; } }
+        }); }
+        for (const pj of PJS) pj.mente.hambreTormenta = Math.max(pj.mente.hambreTormenta || 0, pj.mente.nec.hambre);
+        // las gallinas se amontonan junto al gallinero
+        for (const g of GALLINAS) if (g.estado === 'viva' && !g.meta && g.comiendo <= 0) g.meta = [azarEntre(-1700, -1620), azarEntre(-500, -460)];
+        if (T.t <= 0) terminarTemporal();
+      } else if (T.estado === 'despejando' && T.t <= 0) {
+        T.estado = 'calma'; T.t = azarEntre(300, 540);
+        document.body.classList.remove('tormenta');
+      }
+    }
+    function terminarTemporal() {
+      const T = TEMPORAL, f = T.fuerza, danos = [];
+      T.estado = 'despejando'; T.t = 6;
+      PUERTAS[2].cerrada = false;
+      if (f > 0) {
+        // el maíz del huerto
+        let plantas = 0;
+        for (const p of PLANTAS) if (Math.random() < (f === 1 ? 0.3 : 0.7)) { p.crec = 0; p.muerta = 60; plantas++; }
+        if (plantas) danos.push(`${plantas} planta${plantas > 1 ? 's' : ''} de maíz`);
+        // el maíz del saco de afuera se moja
+        const mojado = Math.floor(RECURSOS.maiz * (f === 1 ? 0.3 : 0.7));
+        if (mojado) { RECURSOS.maiz -= mojado; danos.push(`${mojado} de maíz mojado`); }
+        // los huevos que quedaron afuera
+        const rotos = Math.floor(RECURSOS.canasta.length * (f === 1 ? 0.2 : 0.6)) + Math.floor(RECURSOS.nido.length * (f === 1 ? 0.1 : 0.4));
+        if (rotos) { RECURSOS.canasta.splice(0, Math.min(rotos, RECURSOS.canasta.length)); danos.push(`${rotos} huevo${rotos > 1 ? 's' : ''}`); }
+        // las gallinas: más riesgo si estaban débiles o con hambre
+        let muertas = 0;
+        for (const g of [...GALLINAS]) if (g.estado === 'viva' && Math.random() < (f === 1 ? 0.06 : 0.22) * (g.edad < 1 ? 1.5 : 1) * (1.5 - g.salud * 0.5 + g.hambre * 0.5)) {
+          morirGallina(g, 'temporal'); muertas++;
+        }
+        if (muertas) danos.push(`${muertas} gallina${muertas > 1 ? 's' : ''}`);
+      }
+      anunciar(danos.length ? `pasó el temporal: se perdieron ${danos.join(', ')}` : 'pasó el temporal sin hacer daño');
+      // lo que aprenden de cómo les fue
+      for (const pj of PJS) conPersonaje(pj, () => {
+        mente.temporales = (mente.temporales || 0) + 1;
+        const P = yo.pers;
+        if (mente.hambreTormenta > 0.65 && mente.stockAlEmpezar < 3) {
+          mente.reservaComida = Math.min(8, mente.reservaComida + 2 * P.aprende);
+          mente.aviso = 'pasé hambre... hay que guardar más comida'; mente.tAviso = 2.4;
+        } else if (mente.hambreTormenta < 0.4 && mente.stockAlEmpezar >= mente.reservaComida) {
+          mente.aviso = 'menos mal que teníamos comida guardada'; mente.tAviso = 2.2;
+          aprender('guardarHuevos', 0.4, 0.2); aprender('prepararComida', 0.4, 0.2);
+        }
+        if (f > 0 && danos.some(d => d.includes('mojado'))) { aprender('guardarMaiz', 0.7, 0.3); mente.reservaComida = Math.min(8, mente.reservaComida + 0.5 * P.aprende); }
+        if (f > 0 && danos.some(d => d.includes('huevo'))) aprender('guardarHuevos', 0.6, 0.3);
+        mente.emo.alegria = Math.min(1, mente.emo.alegria + 0.2);
+      });
+    }
+
+    // ---- Guardar, cocinar para después y comer lo guardado ----
+    function guardarComida(tipo, n = 1) { for (let i = 0; i < n; i++) ALMACEN_R.comidas.push({ tipo, edad: 0 }); }
+    function moverAlmacen(dt) {
+      for (const h of ALMACEN_R.huevos) { h.edad += dt * 0.35; if (h.edad > 200) h.podrido = true; }
+      for (let i = ALMACEN_R.comidas.length - 1; i >= 0; i--) {
+        const c = ALMACEN_R.comidas[i];
+        c.edad += dt;
+        if (c.edad > VIDA_COMIDA[c.tipo] * 1.4) {   // se echó a perder y la botan
+          ALMACEN_R.comidas.splice(i, 1);
+          anunciar(`se echó a perder un${c.tipo === 'tortilla' ? 'a' : ''} ${NOMBRE_COMIDA[c.tipo]} guardad${c.tipo === 'tortilla' ? 'a' : 'o'}`);
+          for (const pj of PJS) pj.mente.reservaComida = Math.max(0.5, pj.mente.reservaComida - 0.3 * pj.pers.aprende);   // guardaban de más
+        }
+      }
+      for (const p of PLANTAS) if (p.muerta) { p.muerta -= dt; p.crec = 0; if (p.muerta <= 0) p.muerta = 0; }
+    }
+    function prepararReceta(j) {
+      const r = RECETAS[j.receta];
+      if (ALMACEN_R.maiz < r.maiz || ALMACEN_R.huevos.length < r.huevos) { mente.aviso = 'no alcanza...'; mente.tAviso = 1.6; return false; }
+      ALMACEN_R.maiz -= r.maiz;
+      ALMACEN_R.huevos.sort((a, b) => a.edad - b.edad);
+      j.usados = ALMACEN_R.huevos.splice(0, r.huevos);
+      yo.lleva = { que: r.huevos ? 'huevos' : 'maiz', n: Math.max(1, r.huevos) };
+    }
+    function cocinarReceta(j) {
+      const r = RECETAS[j.receta], hab = mente.habCocina, P = yo.pers;
+      yo.lleva = null;
+      mente.habCocina = Math.min(1, hab + 0.02 * P.aprende);
+      if (Math.random() < 0.3 * (1 - hab) * (1.3 - P.cuidado) * (1.4 - P.paciencia)) {
+        mente.aviso = `se me quemó ${r.dice.startsWith('h') ? 'el' : 'la'} ${r.dice}...`; mente.tAviso = 2;
+        recompensa('receta:' + j.receta, -0.5); recompensa('prepararComida', -0.3);
+        errorAlCocinar('quemado', yo);
+        return false;
+      }
+      if (j.usados && j.usados.some(h => h.podrido)) { mente.aviso = 'puaj, un huevo estaba podrido... lo boté'; mente.tAviso = 2; return false; }
+      j.sale = r.sale;
+      yo.lleva = { que: 'comidaHecha', tipo: r.sale[0][0] };
+      mente.aviso = `¡hice ${r.dice}!`; mente.tAviso = 1.8;
+    }
+    function elegirReceta() {
+      const ops = Object.entries(RECETAS).filter(([, r]) => ALMACEN_R.maiz >= r.maiz && ALMACEN_R.huevos.length >= r.huevos);
+      if (!ops.length) return null;
+      return elegir(Object.fromEntries(ops.map(([k]) => [k, conoce('receta:' + k)])));
+    }
+    function comerGuardada(j) {
+      const lista = ALMACEN_R.comidas;
+      if (!lista.length) return false;
+      // la que más le gusta (o la más vieja, si es cuidadoso)
+      lista.sort((a, b) => yo.pers.cuidado > 0.6 ? b.edad - a.edad : conoce('receta:' + recetaDe(b.tipo)) - conoce('receta:' + recetaDe(a.tipo)));
+      const c = lista.shift();
+      j.comida = c;
+      yo.lleva = { que: 'comidaHecha', tipo: c.tipo };
+    }
+    const recetaDe = tipo => tipo === 'tortilla' ? 'tortilla' : tipo === 'huevoDuro' ? 'huevosDuros' : 'panMaiz';
+    function comerLoGuardado(j) {
+      const c = j.comida, viejo = c.edad > VIDA_COMIDA[c.tipo];
+      const r = comer('comerGuardado', c.tipo, { podrido: viejo });
+      recompensa('receta:' + recetaDe(c.tipo), r);
+    }
+
+    // =====================================================================
+    //  LAS CARTAS: dos mazos (rojo y azul) para lo que se les ocurra:
+    //  jugar entre los dos, hacer pirámides, tirarlas, ordenarlas...
+    // =====================================================================
+    const COLOR_MAZO = ['#c0392b', '#2e5fa8'];
+    const CARTAS = [];
+    for (let m = 0; m < 2; m++) for (let i = 0; i < 16; i++)
+      CARTAS.push({ mazo: m, valor: (i % 8) + 1, estado: 'mazo', x: 0, y: 0, z: 0, ang: 0, incl: 0, boca: false, vx: 0, vy: 0, vz: 0, giro: 0, anim: null });
+    const posMazo = m => [MESA.x - 45 + m * 90, MESA.z - 45];
+    function ordenarMazos() {
+      for (let m = 0; m < 2; m++) {
+        let k = 0;
+        for (const c of CARTAS) if (c.mazo === m && c.estado === 'mazo') {
+          const [x, z] = posMazo(m);
+          Object.assign(c, { x, z, y: MESA.alto + k * 1.4, ang: (k % 3 - 1) * 0.03, incl: 0, boca: false }); k++;
+        }
+      }
+    }
+    ordenarMazos();
+    const enMazo = m => CARTAS.filter(c => c.estado === 'mazo' && (m === undefined || c.mazo === m));
+    const cartasSueltas = () => CARTAS.filter(c => c.estado === 'piso' || c.estado === 'mesa');
+    // llevar una carta de un punto a otro (en un arco, en T segundos)
+    function moverCartaA(c, x, y, z, T = 0.45, ang = 0, incl = 0) {
+      c.anim = { de: [c.x, c.y, c.z, c.ang, c.incl], a: [x, y, z, ang, incl], t: 0, T };
+    }
+    function moverCartas(dt) {
+      for (const c of CARTAS) {
+        if (c.anim) {
+          const A = c.anim; A.t += dt;
+          const u = Math.min(1, A.t / A.T), e = u * u * (3 - 2 * u);
+          c.x = A.de[0] + (A.a[0] - A.de[0]) * e; c.z = A.de[2] + (A.a[2] - A.de[2]) * e;
+          c.y = A.de[1] + (A.a[1] - A.de[1]) * e + Math.sin(u * Math.PI) * 40;
+          c.ang = A.de[3] + (A.a[3] - A.de[3]) * e; c.incl = A.de[4] + (A.a[4] - A.de[4]) * e;
+          if (u >= 1) c.anim = null;
+          continue;
+        }
+        if (c.estado === 'vuelo') {
+          c.vy -= 1500 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt; c.ang += c.giro * dt;
+          // revolotea: frena en el aire
+          c.vx *= 1 - dt * 0.8; c.vz *= 1 - dt * 0.8;
+          const sobreMesa = c.x > MESA.x0 && c.x < MESA.x1 && c.z > MESA.z0 && c.z < MESA.z1;
+          const piso = sobreMesa && c.y > MESA.alto - 20 ? MESA.alto : 0;
+          const r = CUARTOS[cuartoDe(c.x, c.z)];
+          c.x = limitar(c.x, [r.x0 + 15, r.x1 - 15]); c.z = limitar(c.z, [r.z0 + 15, r.z1 - 15]);
+          if (c.y <= piso) { c.y = piso + 0.5; c.estado = piso ? 'mesa' : 'piso'; c.incl = 0; }
+        }
+      }
+      moverPartida(dt);
+    }
+    function carasCarta(c) {
+      const m = new DOMMatrix().translate(c.x, -c.y, c.z).rotate(0, c.ang * GRADOS, 0).rotate(c.incl * GRADOS, 0, 0);
+      const arriba = c.boca ? '#fbfaf3' : COLOR_MAZO[c.mazo];
+      const cs = caja(-15, 15, 0, 1.6, -22, 22, '#f4f1ea').filter(f => f.normal[1] !== 0);
+      cs.find(f => f.normal[1] === -1).rgb = aRGB(arriba);
+      if (c.boca) cs.push(...caja(-5, 5, 1.6, 2.2, -5, 5, COLOR_MAZO[c.mazo]).filter(f => f.normal[1] === -1));   // el palo
+      return { caras: cs, m };
+    }
+    // el que estaba con la mesa: ¿le pegó a la pirámide al pasar?
+    function botarPiramide(culpa) {
+      const pir = CARTAS.filter(c => c.estado === 'piramide');
+      if (!pir.length) return;
+      for (const c of pir) Object.assign(c, { estado: 'vuelo', vx: azarEntre(-160, 160), vy: azarEntre(50, 200), vz: azarEntre(-160, 160), giro: azarEntre(-6, 6), anim: null });
+      PIRAMIDE.hecha = false; PIRAMIDE.n = 0;
+      if (PIRAMIDE.autor && culpa && culpa !== PIRAMIDE.autor) {
+        const autor = PIRAMIDE.autor;
+        conPersonaje(autor, () => {
+          if (distA(culpa) > 1300) return;
+          const P = yo.pers;
+          mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.2 + 0.3 * P.irritable);
+          mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.12 * P.irritable + 0.05);
+          cosa('el otro', -0.12); cambiarRelacion(-0.1);
+          mente.aviso = '¡me botaste la pirámide!'; mente.tAviso = 2.2;
+          if (P.irritable > 0.6 && Math.random() < 0.4) hacerDedo('otro', '');
+        });
+      }
+    }
+    // La pirámide: 3 pisos de triángulos (dos cartas apoyadas) con una carta plana entre piso y piso
+    const PIRAMIDE = { n: 0, hecha: false, autor: null };
+    const LUGARES_PIRAMIDE = (() => {
+      const out = [], cx = MESA.x, cz = MESA.z + 10, base = MESA.alto + 0.5, ancho = 34, alto = 40;
+      const pisos = [3, 2, 1];
+      pisos.forEach((n, p) => {
+        const y = base + p * (alto + 2);
+        for (let i = 0; i < n; i++) {
+          const x = cx + (i - (n - 1) / 2) * ancho * 1.15;
+          out.push([x - 8, y, cz, Math.PI / 2, 0.35], [x + 8, y, cz, Math.PI / 2, -0.35]);   // dos cartas inclinadas
+        }
+        if (p < 2) for (let i = 0; i < n - 1; i++) out.push([cx + (i - (n - 2) / 2) * ancho * 1.15, y + alto, cz, Math.PI / 2, 0]);   // la plana de arriba
+      });
+      return out;
+    })();
+    function poniendoCarta(j, dt) {
+      mente.mirarA = [MESA.x, -MESA.alto - 40, MESA.z];
+      j.tCarta = (j.tCarta || 0) - dt;
+      if (j.tCarta > 0) return;
+      j.tCarta = azarEntre(0.9, 1.6) * (1.4 - yo.pers.paciencia * 0.5);
+      const P = yo.pers, hab = mente.habCartas || 0;
+      const c = enMazo().find(c => c.mazo === j.mazo) || enMazo()[0];
+      if (!c) { j.t = 0; return; }
+      // el riesgo de que se caiga: menos con práctica, cuidado y calma; más si tiembla de miedo o si el otro pasa cerca
+      const o = otroDe(yo), molesta = Math.hypot(o.pos.x - MESA.x, o.pos.z - MESA.z) < 260 ? 0.12 : 0;
+      const riesgo = (0.03 + 0.08 * (1 - hab)) * (1.4 - P.cuidado) * (1.3 - P.paciencia * 0.6) * (1 + mente.emo.miedo + mente.emo.enojo * 0.5) + molesta * PIRAMIDE.n / 15;
+      if (PIRAMIDE.n > 1 && Math.random() < riesgo) {
+        botarPiramide(molesta ? o : null);
+        mente.habCartas = Math.min(1, hab + 0.03 * P.aprende);
+        const f = P.paciencia > 0.6 ? ['ufff... de nuevo', 'bueno, otra vez'] : ['¡noooo!', '¡ARGH!'];
+        mente.aviso = molesta ? '¡me la botaste!' : f[Math.floor(Math.random() * f.length)]; mente.tAviso = 2;
+        mente.emo.enojo = Math.min(1, mente.emo.enojo + (1 - P.paciencia) * 0.3);
+        recompensa('piramide', -0.3);
+        j.t = 0; j.cayo = true;
+        return;
+      }
+      const lugar = LUGARES_PIRAMIDE[PIRAMIDE.n];
+      c.estado = 'piramide';
+      moverCartaA(c, lugar[0], lugar[1], lugar[2], 0.5, lugar[3], lugar[4]);
+      PIRAMIDE.n++; PIRAMIDE.autor = yo;
+      if (PIRAMIDE.n >= LUGARES_PIRAMIDE.length) {
+        PIRAMIDE.hecha = true; PIRAMIDE.tHecha = reloj; j.t = 0;
+        mente.habCartas = Math.min(1, hab + 0.08 * P.aprende);
+        mente.aviso = '¡la terminé!'; mente.tAviso = 2;
+        mente.emo.alegria = Math.min(1, mente.emo.alegria + 0.35);
+        recompensa('piramide', 0.8);
+        conPersonaje(o, () => { if (distA(PIRAMIDE.autor) < 900 && mente.tAviso <= 0) { mente.aviso = mente.rencor.otro > 0.4 ? 'bah' : '¡qué buena!'; mente.tAviso = 1.6; } });
+      }
+    }
+    // Tirar cartas: al aire, o al otro si está enojado con él
+    function tirarCartas(j) {
+      const m = manos[1] || [pos.x, -120, pos.z];
+      const o = j.blanco;
+      for (const c of j.cartas) {
+        c.dueno = null;
+        const a = o ? Math.atan2(o.pos.x - pos.x, o.pos.z - pos.z) + azarEntre(-0.35, 0.35) : orientacion + azarEntre(-1.2, 1.2);
+        const v = o ? Math.min(900, distA(o) * 1.4) : azarEntre(250, 600);
+        Object.assign(c, { estado: 'vuelo', x: m[0], y: -m[1], z: m[2], vx: Math.sin(a) * v, vz: Math.cos(a) * v, vy: azarEntre(250, 520), giro: azarEntre(-9, 9), boca: Math.random() < 0.5, anim: null });
+      }
+      yo.lleva = null;
+      if (o && distA(o) < 700) {
+        conPersonaje(o, () => {
+          mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.12); mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.06);
+          golpe.vx += 90; golpe.t = Math.max(golpe.t, 0.3); yo.ay = '¡oye!';
+          cosa('el otro', -0.06); cambiarRelacion(-0.06);
+        });
+        recompensa('lanzarCartas', mente.emo.enojo > 0.3 ? 0.6 : 0.3);
+        mente.emo.enojo = Math.max(0, mente.emo.enojo - 0.1);
+      } else recompensa('lanzarCartas', yo.escala < 0.8 ? 0.5 : 0.2);
+      mente.aviso = o ? '¡toma!' : '¡wiii!'; mente.tAviso = 1.4;
+    }
+    // Ordenar: junta las cartas tiradas (las más cercanas) y las devuelve a su mazo
+    function juntarCartas(j) {
+      const sueltas = cartasSueltas().sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
+      const cerca = sueltas.filter(c => Math.hypot(c.x - pos.x, c.z - pos.z) < 260).slice(0, 10 - (j.n || 0));
+      for (const c of cerca) { c.estado = 'manoJunta'; c.dueno = yo; }
+      j.n = (j.n || 0) + cerca.length;
+      yo.lleva = j.n ? { que: 'cartas', n: j.n } : null;
+      // si quedan más y le caben, va por otras
+      if (j.n < 10 && cartasSueltas().length && (j.vueltas = (j.vueltas || 0) + 1) <= 4) { j.i -= 1; }
+    }
+    function devolverCartas(j) {
+      for (const c of CARTAS) if (c.estado === 'manoJunta' && c.dueno === yo) { c.estado = 'mazo'; c.dueno = null; }
+      ordenarMazos(); yo.lleva = null;
+      recompensa('ordenarCartas', 0.2 + yo.pers.cuidado * 0.3);
+      mente.aviso = 'listo, ordenadas'; mente.tAviso = 1.4;
+      // al cuidadoso y gruñón le molesta que el otro deje todo tirado
+      if (j.n >= 4 && yo.pers.cuidado > 0.6 && yo.pers.irritable > 0.5 && (mente.tiradasPorOtro || 0) > 2) {
+        mente.aviso = '¡siempre dejas todo tirado!'; mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.12); cambiarRelacion(-0.04);
+      }
+    }
+
+    // ---- Jugar a las cartas entre los dos (cada uno en su silla) ----
+    let PARTIDA = null;
+    function invitarACartas() {
+      const o = otroDe(yo);
+      if (PARTIDA || enMazo().length < 8) return false;
+      let acepta = false;
+      const yoMismo = yo;
+      conPersonaje(o, () => {
+        const ocupado = mente.acostado > 0.3 || mente.tirado > 0.3 || mente.accion === 'jugador' || (mente.juego && TAREAS[mente.juego.tipo]) || mente.nec.hambre > 0.75;
+        const ganas = 0.35 + conoce('cartasJuntos') * 0.4 + Math.max(0, RELACION.v) * 0.5 - mente.rencor.otro + (TEMPORAL.estado === 'tormenta' ? 0.3 : 0);
+        acepta = !ocupado && Math.random() < ganas;
+        mente.aviso = acepta ? '¡ya!' : mente.rencor.otro > 0.4 ? 'contigo no' : 'ahora no'; mente.tAviso = 1.6;
+        if (acepta) {
+          soltarCubo();
+          Object.assign(mente, { accion: 'cartas', juego: { tipo: 'cartas', silla: 1, fase: 'ir' }, tAccion: 120, mirarA: null, giroForzado: null });
+          irA([SILLAS[1].x, 0, SILLAS[1].z]);
+        }
+      });
+      if (!acepta) { recompensa('cartasJuntos', -0.1); return false; }
+      PARTIDA = { a: yoMismo, b: o, fase: 'sentarse', t: 0, manos: [[], []], mesa: [], turno: 0, mazo: Math.random() < 0.5 ? 0 : 1, puntos: [0, 0] };
+      Object.assign(mente, { accion: 'cartas', juego: { tipo: 'cartas', silla: 0, fase: 'ir' }, tAccion: 120 });
+      mente.juego.partida = PARTIDA; o.mente.juego.partida = PARTIDA;
+      irA([SILLAS[0].x, 0, SILLAS[0].z]);
+      return true;
+    }
+    // llegó a su silla: se sienta mirando la mesa
+    function llegoACartas(j) {
+      Object.assign(mente, { meta: null, ruta: [], giroForzado: SILLAS[j.silla].giro, mirarA: [MESA.x, -MESA.alto, MESA.z] });
+      j.fase = 'sentado'; j.sentado = true;
+    }
+    function jugandoCartas(j, dt) {
+      if (j.tipo === 'cartas' && (!j.partida || j.partida !== PARTIDA)) { mente.juego = null; mente.tAccion = 0.4; return; }
+      if (j.fase === 'ir' && !mente.meta) llegoACartas(j);
+    }
+    function moverPartida(dt) {
+      const P = PARTIDA;
+      if (!P) return;
+      const [A, B] = [P.a, P.b];
+      const sigue = pj => pj.mente.juego && pj.mente.juego.partida === P;
+      if (!sigue(A) || !sigue(B)) {   // uno se fue a la mitad
+        const quedo = sigue(A) ? A : sigue(B) ? B : null;
+        for (const c of CARTAS) if (c.estado === 'jugada' || c.estado === 'repartida') c.estado = 'mesa';
+        PARTIDA = null;
+        if (quedo) conPersonaje(quedo, () => {
+          mente.juego = null; mente.tAccion = 0.4;
+          mente.aviso = '¿y te vas?'; mente.tAviso = 1.6;
+          mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.08 * yo.pers.irritable);
+        });
+        return;
+      }
+      P.t -= dt;
+      const sentados = A.mente.juego.sentado && B.mente.juego.sentado;
+      if (P.fase === 'sentarse') { if (sentados) { P.fase = 'repartir'; P.t = 0.5; A.mente.aviso = 'reparto yo'; A.mente.tAviso = 1.4; } return; }
+      if (P.t > 0) return;
+      const yJug = [0, 1], frente = k => SILLAS[k].x + (k === 0 ? 1 : -1) * 150;   // dónde deja sus cartas cada uno
+      if (P.fase === 'repartir') {
+        const k = P.manos[0].length <= P.manos[1].length ? 0 : 1;
+        const c = enMazo(P.mazo)[0] || enMazo()[0];
+        if (!c || P.manos[k].length >= 4) { P.fase = 'jugar'; P.t = 1; P.turno = 1; return; }
+        c.estado = 'repartida';
+        moverCartaA(c, frente(k), MESA.alto + 0.5 + P.manos[k].length * 1.2, MESA.z - 45 + P.manos[k].length * 30, 0.35, 0);
+        P.manos[k].push(c); P.t = 0.3;
+        return;
+      }
+      if (P.fase === 'jugar') {
+        const k = P.turno, pj = k === 0 ? A : B, mano = P.manos[k];
+        if (!P.manos[0].length && !P.manos[1].length) { terminarPartida(); return; }
+        if (!mano.length) { P.turno = 1 - k; return; }
+        // elige la carta: con práctica elige mejor (la más alta cuando conviene)
+        const hab = pj.mente.habCartas || 0;
+        mano.sort((a, b) => b.valor - a.valor);
+        const c = Math.random() < 0.3 + hab * 0.6 ? mano.shift() : mano.splice(Math.floor(Math.random() * mano.length), 1)[0];
+        c.estado = 'jugada'; c.boca = true;
+        moverCartaA(c, MESA.x + (k === 0 ? -14 : 14) + azarEntre(-8, 8), MESA.alto + 1 + P.mesa.length * 1.4, MESA.z + 25 + azarEntre(-10, 10), 0.45, azarEntre(-0.6, 0.6));
+        P.mesa.push(c); P.puntos[k] += c.valor;
+        conPersonaje(pj, () => { golpe.vCab -= 40; if (mente.tAviso <= 0 && Math.random() < 0.35) { mente.aviso = c.valor >= 7 ? '¡toma!' : c.valor <= 2 ? 'mmm...' : ['a ver...', 'esta', 'juego'][Math.floor(Math.random() * 3)]; mente.tAviso = 1.2; } });
+        P.turno = 1 - k; P.t = azarEntre(1.1, 1.9);
+        return;
+      }
+      if (P.fase === 'recoger') {
+        for (const c of CARTAS) if (c.estado === 'jugada' || c.estado === 'repartida') c.estado = 'mazo';
+        ordenarMazos();
+        PARTIDA = null;
+        for (const pj of [A, B]) conPersonaje(pj, () => { mente.juego = null; mente.tAccion = 0.6; });
+      }
+    }
+    function terminarPartida() {
+      const P = PARTIDA, [A, B] = [P.a, P.b];
+      const gana = P.puntos[0] === P.puntos[1] ? -1 : P.puntos[0] > P.puntos[1] ? 0 : 1;
+      P.fase = 'recoger'; P.t = 2.6;
+      [A, B].forEach((pj, k) => conPersonaje(pj, () => {
+        const Pp = yo.pers, gano = gana === k, empate = gana === -1;
+        mente.habCartas = Math.min(1, (mente.habCartas || 0) + 0.04 * Pp.aprende);
+        if (empate) { mente.aviso = 'empate...'; recompensa('cartasJuntos', 0.3); }
+        else if (gano) {
+          mente.aviso = Pp.orgulloso > 0.6 ? '¡gané, obvio!' : '¡gané!'; mente.emo.alegria = Math.min(1, mente.emo.alegria + 0.3);
+          recompensa('cartasJuntos', 0.8); mente.saltosPend = 1; mente.tSalto = 0.2;
+        } else {
+          // perder: según cómo es, se ríe, se enoja o acusa trampa
+          const rabia = (Pp.orgulloso * 0.6 + Pp.irritable * 0.6 + mente.emo.enojo) * azarEntre(0.6, 1.4);
+          if (rabia > 0.9) {
+            mente.aviso = '¡hiciste trampa!'; mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.3); mente.rencor.otro = Math.min(1, mente.rencor.otro + 0.12);
+            cosa('el otro', -0.1); cambiarRelacion(-0.08);
+            if (Math.random() < 0.35) hacerDedo('otro', '');
+            // y a veces tira las cartas de la mesa
+            if (Math.random() < 0.4 * Pp.irritable) for (const c of CARTAS) if (c.estado === 'jugada') Object.assign(c, { estado: 'vuelo', vx: azarEntre(-300, 300), vz: azarEntre(-300, 300), vy: azarEntre(200, 450), giro: azarEntre(-8, 8), anim: null });
+          } else if (rabia > 0.5) { mente.aviso = 'la próxima te gano'; mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.08); }
+          else { mente.aviso = 'bien jugado'; cambiarRelacion(0.03); }
+          recompensa('cartasJuntos', 0.25 - rabia * 0.3);
+        }
+        mente.tAviso = 2;
+        cambiarRelacion(0.03);   // jugar juntos los acerca un poco (aunque peleen)
+      }));
+    }
+    // ---- Las ganas de las cosas de adentro: el almacén, la cocina y las cartas ----
+    const TAREAS_AFUERA = ['alimentarGallinas', 'darAgua', 'cosechar', 'recogerHuevos', 'mirarGallinas', 'acariciarGallina',
+                           'perseguirGallinas', 'lanzarHuevo', 'cocinarGallina', 'guardarHuevos', 'guardarMaiz'];
+    function ganasCasa() {
+      const w = {}, c = conoce, P = yo.pers, h = mente.nec.hambre, e = mente.emo;
+      const tormenta = TEMPORAL.estado === 'tormenta', aviso = TEMPORAL.estado === 'aviso';
+      const guardado = reservaGuardada(), falta = Math.max(0, mente.reservaComida - guardado);
+      // guardar: el cuidadoso guarda aunque no pase nada; el que ya vivió un temporal, más; con el cielo nublado, mucho más
+      const previsor = 0.05 + P.cuidado * 0.25 + Math.min(1, (mente.temporales || 0) * 0.4) + (aviso ? 2.5 : 0);
+      if (afuera() && (RECURSOS.canasta.length + RECURSOS.nido.length) > 0)
+        w.guardarHuevos = previsor * (0.4 + falta * 0.35) * c('guardarHuevos') * (1.3 - P.perezoso * 0.7);
+      if (afuera() && RECURSOS.maiz >= Math.max(3, cuentaGallinas() * 0.6) + 2)
+        w.guardarMaiz = previsor * (0.3 + falta * 0.3 + (ALMACEN_R.maiz < 4 ? 0.4 : 0)) * c('guardarMaiz') * (1.3 - P.perezoso * 0.7);
+      // cocinar para guardar: si hay ingredientes adentro y la despensa está bajo lo que él cree que hay que tener
+      if (elegirRecetaPosible())
+        w.prepararComida = (0.04 + falta * 0.25 * (0.4 + P.cuidado) + h * h * 1.5 + (tormenta ? 0.5 : 0)) * c('prepararComida') * (1 - (mente.miedos['el fogón'] || 0) * 0.5);
+      if (ALMACEN_R.comidas.length) w.comerGuardado = (0.02 + h * h * 4 * P.gloton) * c('comerGuardado') * (tormenta || !afuera() ? 1.5 : 0.8);
+      // las cartas: con temporal, encerrados, más ganas de jugar
+      const encerrados = tormenta ? 2.5 : 1;
+      const o = otroDe(yo), libreOtro = o.mente.acostado < 0.3 && !o.mente.dormidoPiso && !o.mente.desmayo && !(o.mente.juego && TAREAS[o.mente.juego.tipo]);
+      if (!PARTIDA && libreOtro && enMazo().length >= 8 && mente.rencor.otro < 0.5)
+        w.cartasJuntos = (0.9 + Math.max(0, RELACION.v) * 0.9) * c('cartasJuntos') * encerrados * (1.2 - h);
+      if (PIRAMIDE.n === 0 && enMazo().length >= LUGARES_PIRAMIDE.length)
+        w.piramide = (0.2 + P.paciencia * 0.6) * c('piramide') * encerrados;
+      if (enMazo().length >= 3) w.lanzarCartas = (0.04 + e.enojo * 0.6 + mente.rencor.otro * 0.5 + (yo.escala < 0.8 ? 0.15 : 0)) * c('lanzarCartas') * (tormenta ? 1.5 : 1);
+      const sueltas = cartasSueltas().length + (PIRAMIDE.hecha && reloj - (PIRAMIDE.tHecha || 0) > 50 ? 6 : 0);
+      if (sueltas) w.ordenarCartas = (0.04 + sueltas * 0.1 * (0.3 + P.cuidado) + (enMazo().length < 8 ? 0.35 : 0)) * c('ordenarCartas') * (1.3 - P.perezoso * 0.8);
+      // con temporal no puede salir: lo de afuera no está
+      if (!afuera()) { for (const k of TAREAS_AFUERA) delete w[k]; }
+      return w;
+    }
+    const elegirRecetaPosible = () => Object.values(RECETAS).some(r => ALMACEN_R.maiz >= r.maiz && ALMACEN_R.huevos.length >= r.huevos);
     const TAREAS = {
       comerMaiz: () => [
-        en('saco', { dur: 1, pose: 'agarrar', al: () => { if (RECURSOS.maiz < 1) return sinMaiz(); RECURSOS.maiz--; yo.lleva = { que: 'maiz' }; } }),
+        { antes: j => { j.f = fuenteMaiz(); return !!j.f; }, donde: j => LUGAR[j.f].donde, giro: j => LUGAR[j.f].giro, mirar: j => LUGAR[j.f].mirar,
+          dur: 1, pose: 'agarrar', al: j => {
+            if (j.f === 'bin') { if (ALMACEN_R.maiz < 1) return false; ALMACEN_R.maiz--; }
+            else { if (RECURSOS.maiz < 1) return sinMaiz(); RECURSOS.maiz--; }
+            yo.lleva = { que: 'maiz' }; } },
         { dur: 2.6, pose: 'comer', dice: 'ñam', al: () => comer('comerMaiz', 'maiz') }],
       comerHuevoCrudo: () => [tomarHuevo,
         { dur: 2, pose: 'comer', dice: 'glup', al: j => comer('comerHuevoCrudo', 'huevoCrudo', { podrido: j.huevo && j.huevo.podrido }) }],
@@ -4362,6 +5063,73 @@
           giro: j => j.blanco ? Math.atan2(j.blanco.pos.x - pos.x, j.blanco.pos.z - pos.z) : orientacion + azarEntre(-1.2, 1.2),
           mirar: j => j.blanco ? { pj: j.blanco } : null, dur: 0.9, pose: 'apuntarHuevo',
           dice: j => j.blanco ? '¡toma esto!' : 'a ver qué pasa...', al: j => tirarHuevo(j.blanco) }],
+      // ---- el almacén ----
+      guardarHuevos: () => [
+        { antes: () => afuera() && (RECURSOS.canasta.length || RECURSOS.nido.length) > 0,
+          donde: () => LUGAR[RECURSOS.canasta.length ? 'canasta' : 'nido'].donde, giro: () => LUGAR[RECURSOS.canasta.length ? 'canasta' : 'nido'].giro,
+          mirar: () => LUGAR[RECURSOS.canasta.length ? 'canasta' : 'nido'].mirar, dur: 1.3, pose: 'agarrar', dice: 'los guardo adentro', al: j => {
+            const f = RECURSOS.canasta.length ? 'canasta' : 'nido';
+            // deja los que el otro quiere para pollitos (si es del nido)
+            const deja = f === 'nido' && estadoCorral().faltan > 0 ? 2 : 0;
+            j.lista = RECURSOS[f].splice(0, Math.max(0, Math.min(5, RECURSOS[f].length - deja)));
+            if (!j.lista.length) return false;
+            yo.lleva = { que: 'huevos', n: j.lista.length };
+          } },
+        en('huevera', { dur: 1.4, pose: 'verter', al: j => {
+          ALMACEN_R.huevos.push(...j.lista); yo.lleva = null;
+          recompensa('guardarHuevos', 0.15 + (TEMPORAL.estado !== 'calma' ? 0.5 : 0) + yo.pers.cuidado * 0.2);
+          mente.aviso = `guardé ${j.lista.length} huevo${j.lista.length > 1 ? 's' : ''}`; mente.tAviso = 1.5;
+        } })],
+      guardarMaiz: () => [
+        en('saco', { dur: 1.2, pose: 'agarrar', antes: () => afuera() && RECURSOS.maiz >= 2, al: j => {
+          // deja un poco afuera para las gallinas
+          j.n = Math.min(6, Math.floor(RECURSOS.maiz - Math.max(3, cuentaGallinas() * 0.6)));
+          if (j.n < 1) return false;
+          RECURSOS.maiz -= j.n; yo.lleva = { que: 'maiz', n: j.n };
+        } }),
+        en('bin', { dur: 1.2, pose: 'verter', al: j => {
+          ALMACEN_R.maiz += j.n; yo.lleva = null;
+          recompensa('guardarMaiz', 0.15 + (TEMPORAL.estado !== 'calma' ? 0.5 : 0) + yo.pers.cuidado * 0.2);
+        } })],
+      prepararComida: () => [
+        en('despensa', { dur: 1.4, pose: 'agarrar', antes: j => !!(j.receta = elegirReceta()), al: j => prepararReceta(j) }),
+        en('mesada', { dur: () => azarEntre(4, 6), pose: 'fogon', dice: j => `voy a hacer ${RECETAS[j.receta].dice}`, al: j => cocinarReceta(j) }),
+        // si tiene mucha hambre se come una parte al tiro; el resto lo guarda
+        { antes: j => { j.comeYa = mente.nec.hambre > 0.6; }, donde: j => j.comeYa ? null : LUGAR.despensa.donde, giro: j => j.comeYa ? null : 0,
+          mirar: j => j.comeYa ? null : LUGAR.despensa.mirar, dur: j => j.comeYa ? 2.4 : 1.2, pose: j => j.comeYa ? 'comer' : 'verter', al: j => {
+          let [tipo, n] = j.sale[0];
+          if (j.comeYa) { n--; comer('prepararComida', tipo); }
+          guardarComida(tipo, n);
+          if (!j.comeYa) yo.lleva = null;
+          recompensa('receta:' + j.receta, 0.4); recompensa('prepararComida', 0.3 + (TEMPORAL.estado !== 'calma' ? 0.4 : 0));
+        } }],
+      comerGuardado: () => [
+        en('despensa', { dur: 1, pose: 'agarrar', al: j => comerGuardada(j) }),
+        { dur: 2.4, pose: 'comer', dice: 'ñam', al: j => comerLoGuardado(j) }],
+      // ---- las cartas ----
+      piramide: () => [
+        en('ladoMesa', { dur: 40, pose: 'agarrar', dice: 'una pirámide de cartas...', antes: j => { j.mazo = Math.random() < 0.5 ? 0 : 1; return PIRAMIDE.n === 0 && enMazo().length >= LUGARES_PIRAMIDE.length; },
+          cada: (j, dt) => poniendoCarta(j, dt), al: j => { if (!PIRAMIDE.hecha && !j.cayo) { recompensa('piramide', 0); mente.aviso = 'me aburrí'; mente.tAviso = 1.4; } } })],
+      lanzarCartas: () => [
+        en('ladoMesa', { dur: 1, pose: 'agarrar', antes: () => enMazo().length >= 3, al: j => {
+          j.cartas = enMazo().slice(-Math.floor(azarEntre(3, 8)));
+          for (const c of j.cartas) { c.estado = 'mano'; c.dueno = yo; }
+          yo.lleva = { que: 'cartas', n: j.cartas.length };
+          // ¿se las tira al otro? si está enojado con él y lo tiene cerca
+          const o = otroDe(yo);
+          j.blanco = (mente.emo.enojo > 0.35 || mente.rencor.otro > 0.3) && distA(o) < 650 && cuartoDe(o.pos.x, o.pos.z) === cuartoDe(pos.x, pos.z) ? o : null;
+        } }),
+        { giro: j => j.blanco ? Math.atan2(j.blanco.pos.x - pos.x, j.blanco.pos.z - pos.z) : orientacion + azarEntre(-1.4, 1.4),
+          mirar: j => j.blanco ? { pj: j.blanco } : null, dur: 0.8, pose: 'apuntarHuevo', al: j => tirarCartas(j) }],
+      ordenarCartas: () => [
+        { antes: j => { if (PIRAMIDE.hecha && reloj - (PIRAMIDE.tHecha || 0) > 50) { botarPiramide(null); return true; } return cartasSueltas().length > 0; },
+          donde: j => {
+            const c = cartasSueltas().sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z))[0];
+            if (!c) return null;
+            if (c.x > MESA.x0 - 90 && c.x < MESA.x1 + 90 && c.z > MESA.z0 - 90 && c.z < MESA.z1 + 90) return LUGAR.ladoMesa.donde;
+            return dentroDelCuarto(CUARTOS[cuartoDe(c.x, c.z)], c.x, c.z);
+          }, dur: 1.1, pose: 'cosechar', al: j => juntarCartas(j) },
+        en('ladoMesa', { dur: 1.2, pose: 'verter', antes: j => (j.n || 0) > 0, al: j => devolverCartas(j) })],
     };
     // lo que piensa la primera vez que prueba algo
     const PRIMERA_VEZ = {
@@ -4369,16 +5137,24 @@
       cocinarGallina: 'tengo tanta hambre... esa gallina...', alimentarGallinas: '¿las gallinas comerán maíz?', darAgua: '¿tendrán sed?',
       cosechar: '¿qué tiene esa planta?', recogerHuevos: '¿qué es eso en el nido?', mirarGallinas: '¿qué son esas?',
       acariciarGallina: '¿se dejará tomar?', perseguirGallinas: '¿y si las asusto?', lanzarHuevo: '¿y si lo tiro?',
+      guardarHuevos: '¿y si guardo huevos adentro?', guardarMaiz: '¿y si guardo maíz en el almacén?', prepararComida: '¿qué puedo hacer con esto?',
+      comerGuardado: '¿y si como de lo guardado?', piramide: '¿se podrán parar las cartas?', lanzarCartas: '¿y si las tiro?', ordenarCartas: 'mucho desorden...',
     };
     Object.assign(PENSAMIENTOS, {
       comerMaiz: ['tengo hambre...'], comerHuevoCrudo: ['tengo hambre...'], cocinarHuevo: ['un huevo frito...', 'tengo hambre...'], cocinarParaOtro: ['¿tendrá hambre?'],
       alimentarGallinas: ['las gallinas...'], cosechar: ['a juntar maíz'], recogerHuevos: ['a ver si hay huevos'],
       perseguirGallinas: ['jeje...'], dormir: ['tengo sueño...', 'qué sueño...'],
+      cartasJuntos: ['¿jugamos cartas?'], piramide: ['a ver si me sale...'], lanzarCartas: ['jeje...'], prepararComida: ['a cocinar algo'],
+      guardarHuevos: ['mejor guardo los huevos'], guardarMaiz: ['hay que guardar maíz'], comerGuardado: ['tengo hambre...'],
     });
     function empezarTarea(tipo) {
       const pasos = TAREAS[tipo]();
       mente.juego = { tipo, pasos, i: -1, fase: 'ir', t: 0, pose: null, atascado: 0 };
-      if (tipo === 'cocinarHuevo' || tipo === 'cocinarParaOtro') SARTEN.reservado = { pj: yo, t: reloj };
+      if (tipo === 'cocinarHuevo' || tipo === 'cocinarParaOtro') {
+        const p = mente.juego.sarten = elegirSarten();
+        if (!p) { terminarTarea(mente.juego, true); return; }
+        p.reservado = { pj: yo, t: reloj };
+      }
       mente.tAccion = 80;
       const k = mente.K[tipo];
       if ((!k || k.n === 0) && mente.tAviso <= 0) { mente.aviso = PRIMERA_VEZ[tipo] || '¿y si pruebo...?'; mente.tAviso = 2; }
@@ -4403,7 +5179,7 @@
       const giro = valor(p.giro, j);
       mente.giroForzado = giro ?? null;
       mente.mirarA = valor(p.mirar, j) || null;
-      j.pose = p.pose || null;
+      j.pose = valor(p.pose, j) || null;
       const dice = valor(p.dice, j);
       if (dice && mente.tAviso <= 0) { mente.aviso = dice; mente.tAviso = 1.5; }
     }
@@ -4434,7 +5210,7 @@
     }
     function terminarTarea(j, fallo) {
       if (mente.juego !== j) return;
-      if (SARTEN.reservado && SARTEN.reservado.pj === yo && !SARTEN.huevo) SARTEN.reservado = null;
+      for (const p of SARTENES) if (p.reservado && p.reservado.pj === yo && !p.huevo) p.reservado = null;
       Object.assign(mente, { juego: null, tAccion: 0.4, giroForzado: null, mirarA: null });
       if (yo.lleva) { if (fallo) soltarLleva(); else yo.lleva = null; }
     }
@@ -4533,7 +5309,7 @@
       const yoMismo = yo;
       conPersonaje(otroDe(yo), () => {
         if (mente.acostado > 0.5 || mente.dormidoPiso || mente.desmayo) return;
-        if (cuartoDe(pos.x) !== PATIO && distA(yoMismo) > 1200) return;   // no lo vio
+        if (cuartoDe(pos.x, pos.z) !== PATIO && distA(yoMismo) > 1200) return;   // no lo vio
         const cariño = Math.max(0, cosaV(g.nombre)) + Math.max(0, cosaV('las gallinas')) * 0.6;
         if (cariño > 0.25) {
           mente.emo.enojo = Math.min(1, mente.emo.enojo + 0.3 + cariño * 0.3);
@@ -4564,6 +5340,9 @@
     }
     const COMIDAS = {
       maiz:        { llena: 0.2,  nombre: 'el maíz', mal: 0.05 },
+      tortilla:    { llena: 0.4,  nombre: 'las tortillas', mal: 0.02, sabor: 0.1 },
+      huevoDuro:   { llena: 0.32, nombre: 'los huevos duros', mal: 0.02, sabor: 0.05 },
+      panMaiz:     { llena: 0.6,  nombre: 'el pan de maíz', mal: 0.02, sabor: 0.25 },
       huevoCrudo:  { llena: 0.28, nombre: 'los huevos crudos', mal: 0.4 },
       pollo:       { llena: 0.95, nombre: 'el pollo asado', mal: 0.02 },
     };
@@ -4662,7 +5441,7 @@
     function blancoHuevo() {
       const o = otroDe(yo);
       const quiere = mente.rencor.otro > 0.2 || mente.emo.enojo > 0.45 || (yo.escala < 0.8 && Math.random() < 0.3);
-      return quiere && cuartoDe(o.pos.x) === cuartoDe(pos.x) && distA(o) < 1000 && distA(o) > 150 ? o : null;
+      return quiere && cuartoDe(o.pos.x, o.pos.z) === cuartoDe(pos.x, pos.z) && distA(o) < 1000 && distA(o) > 150 ? o : null;
     }
     function tirarHuevo(b) {
       const m = manos[1];
@@ -4792,7 +5571,7 @@
           Math.random() < dt * 0.12 * (mente.rencor.otro + e.enojo) * (0.5 + P.irritable * 1.2)) hacerDedo('otro');
       // lo que piensa de vez en cuando
       if (autonomo() && libre && mente.tAviso <= 0 && Math.random() < dt * 0.05) {
-        const C = estadoCorral(), enPatio = cuartoDe(pos.x) === PATIO;
+        const C = estadoCorral(), enPatio = cuartoDe(pos.x, pos.z) === PATIO;
         const frase = n.hambre > 0.7 ? 'tengo hambre...' : n.sueno > 0.75 ? 'qué sueño...' : n.fatiga > 0.8 ? 'estoy cansado...'
                     : mente.rencor.otro > 0.5 && otroCerca ? 'no lo quiero ver...'
                     : C.bajando > 0.4 ? 'se están acabando las gallinas...'
@@ -4842,7 +5621,7 @@
         let mejor = null, dMax = -1;
         for (const c of cuartosPosibles()) for (const x of [c.x0 + MARGEN + 10, c.x1 - MARGEN - 10]) for (const z of [c.z0 + MARGEN + 10, c.z1 - MARGEN - 10]) {
           if (!libre(x, z)) continue;
-          const d = Math.hypot(x - desde[0], z - desde[1]) + (yo.escala < 0.8 && cuartoDe(x) === 2 ? 1500 : 0);
+          const d = Math.hypot(x - desde[0], z - desde[1]) + (yo.escala < 0.8 && cuartoDe(x, z) === 2 ? 1500 : 0);
           if (d > dMax) { dMax = d; mejor = [x, 0, z]; }
         }
         if (mejor) {
@@ -4949,6 +5728,8 @@
         case 'maiz': return [caja(x - 7, x + 7, h - 20, h + 20, z - 7, z + 7, '#f2c94c'), caja(x - 8, x + 8, h - 24, h - 12, z - 8, z + 8, '#7cc057')].flat();
         case 'huevo': return huevo(0, l.huevo && l.huevo.podrido ? '#b9c48a' : '#f6efe0');
         case 'huevos': return Array.from({ length: l.n }, (_, i) => huevo((i - (l.n - 1) / 2) * 16, '#f6efe0')).flat();
+        case 'cartas': return [caja(x - 15, x + 15, h - 2, h + 2 + l.n * 0.8, z - 22, z + 22, '#f4f1ea'), caja(x - 13, x + 13, h + 2 + l.n * 0.8, h + 3 + l.n * 0.8, z - 20, z + 20, COLOR_MAZO[pj === GRANDE ? 0 : 1])].flat();
+        case 'comidaHecha': return carasComida(l.tipo, x, h - 6, z);
         case 'huevoFrito': {
           const clara = { crudo: '#d9d6cf', blandito: '#fbfaf3', perfecto: '#fbfaf3', tostado: '#e2c08a', quemado: '#4a3a2c' }[l.punto];
           const yema = { crudo: '#f5b82e', blandito: '#f5b82e', perfecto: '#f2a62a', tostado: '#d98c1e', quemado: '#3a2a1c' }[l.punto];
@@ -4960,13 +5741,37 @@
       }
       return [];
     }
+    // cómo se ve cada comida hecha
+    function carasComida(tipo, x, y, z) {
+      if (tipo === 'tortilla') return caja(x - 18, x + 18, y, y + 4, z - 18, z + 18, '#e9c46a');
+      if (tipo === 'huevoDuro') return [caja(x - 8, x + 8, y, y + 18, z - 7, z + 7, '#fbfaf3'), caja(x - 4, x + 4, y + 18, y + 19, z - 3, z + 3, '#f2b33d')].flat();
+      return [caja(x - 22, x + 22, y, y + 18, z - 14, z + 14, '#d9a441'), caja(x - 20, x + 20, y + 18, y + 22, z - 12, z + 12, '#b97a2a')].flat();
+    }
+    // lo de adentro que cambia: las cartas, el sartén de la cocina y lo que hay guardado en el almacén
+    function dibujarCasa(poner) {
+      for (const c of CARTAS) if (c.estado !== 'mano' && c.estado !== 'manoJunta') { const k = carasCarta(c); poner(k.caras, k.m, cuartoDe(c.x, c.z), null); }
+      poner(carasSarten(SARTENES[1]), null, 0, null);
+      const H = HUEVERA;
+      ALMACEN_R.huevos.slice(0, 24).forEach((h, i) => {
+        const fila = Math.floor(i / 12), k = i % 12, x = H.x0 + 22 + (k % 6) * 44, z = H.z0 + 22 + Math.floor(k / 6) * 34, y = 6 + fila * 60;
+        poner(sinAbajo([caja(x - 7, x + 7, y, y + 18, z - 6, z + 6, colorHuevo(h))]), null, ALMACEN, null);
+      });
+      if (ALMACEN_R.maiz > 0) poner(sinAbajo([caja(BIN.x0 + 8, BIN.x1 - 8, 8, 10 + Math.min(70, ALMACEN_R.maiz * 3.5), BIN.z0 + 8, BIN.z1 - 8, '#f2c94c')]), null, ALMACEN, null);
+      ALMACEN_R.comidas.slice(0, 12).forEach((c, i) => {
+        const x = DESPENSA.x0 + 40 + (i % 6) * 44, y = i < 6 ? 6 : 70, z = (DESPENSA.z0 + DESPENSA.z1) / 2;
+        const caras = carasComida(c.tipo, x, y, z);
+        if (c.edad > VIDA_COMIDA[c.tipo]) for (const f of caras) f.rgb = f.rgb.map((v, j) => Math.round(v * 0.6 + [90, 110, 60][j] * 0.4));   // se está poniendo verde
+        poner(sinAbajo(caras), null, ALMACEN, null);
+      });
+    }
     function dibujarPatio(poner, verPatio) {
       // lo que llevan en la mano, los huevos que vuelan y las manchas se ven en cualquier parte
-      for (const pj of PJS) if (pj.lleva && pj.lleva.que !== 'gallina') poner(carasLleva(pj), null, cuartoDe(pj.pos.x), null);
-      for (const g of GALLINAS) if (g.estado === 'mano' && g.dueno) for (const p of partesGallina(g)) poner(p.caras, p.m, cuartoDe(g.dueno.pos.x), null);
-      for (const v of VUELOS) poner(caja(v.x - 7, v.x + 7, v.y - 9, v.y + 9, v.z - 6, v.z + 6, '#f6efe0'), null, cuartoDe(v.x), null);
+      for (const pj of PJS) if (pj.lleva && pj.lleva.que !== 'gallina') poner(carasLleva(pj), null, cuartoDe(pj.pos.x, pj.pos.z), null);
+      for (const g of GALLINAS) if (g.estado === 'mano' && g.dueno) for (const p of partesGallina(g)) poner(p.caras, p.m, cuartoDe(g.dueno.pos.x, g.dueno.pos.z), null);
+      for (const v of VUELOS) poner(caja(v.x - 7, v.x + 7, v.y - 9, v.y + 9, v.z - 6, v.z + 6, '#f6efe0'), null, cuartoDe(v.x, v.z), null);
       for (const m of MANCHAS) poner(soloArriba([caja(m.x - 20, m.x + 20, 0, 1.5, m.z - 15, m.z + 15, '#fbfaf3'),
-                                               caja(m.x - 8, m.x + 8, 1.5, 3, m.z - 7, m.z + 7, '#f2b33d')]), null, cuartoDe(m.x), null);
+                                               caja(m.x - 8, m.x + 8, 1.5, 3, m.z - 7, m.z + 7, '#f2b33d')]), null, cuartoDe(m.x, m.z), null);
+      dibujarCasa(poner);
       if (!verPatio) return;
       for (const g of GALLINAS) if (g.estado !== 'mano') for (const p of partesGallina(g)) poner(p.caras, p.m, PATIO, g);
       RECURSOS.nido.forEach((h, i) => {
@@ -4988,7 +5793,7 @@
         poner(sinAbajo([caja(x - 9, x + 9, 36, 36 + h, FOGON.z - 10 + dz, FOGON.z + 10 + dz, i === 1 ? '#ffd23f' : '#f07a2b')]), null, PATIO, null);
       }
       for (const p of PLANTAS) poner(carasPlanta(p), null, PATIO, null);
-      poner(carasSarten(), null, PATIO, null);
+      poner(carasSarten(SARTENES[0]), null, PATIO, null);
     }
 
     // =====================================================================
@@ -5007,6 +5812,9 @@
       pasear: 'pasear', sentarse: 'sentarse', tirarse: 'tirarse al piso', consolar: 'consolar', juguetes: 'sus juguetes',
       puf: 'el puf', suPieza: 'su pieza', borrarTodo: 'borrar todo', camara: 'mirarte', saludar: 'saludarte', mirarPunto: 'mirar',
       lampara: 'la lámpara',
+      guardarHuevos: 'guardar huevos', guardarMaiz: 'guardar maíz', prepararComida: 'cocinar para guardar', comerGuardado: 'comer lo guardado',
+      cartasJuntos: 'jugar a las cartas', piramide: 'pirámide de cartas', lanzarCartas: 'tirar cartas', ordenarCartas: 'ordenar las cartas',
+      'receta:tortilla': 'tortillas', 'receta:huevosDuros': 'huevos duros', 'receta:panMaiz': 'pan de maíz',
     };
     function actualizarPaneles() {
       const ahora = performance.now();
@@ -5058,6 +5866,14 @@
               `huevos: ${RECURSOS.nido.length} en el nido · ${RECURSOS.canasta.length} en la canasta${podridos ? ` (${podridos} podrido${podridos > 1 ? 's' : ''})` : ''}` +
               `<div class="fila" style="justify-content:flex-end">${barra('comedero', RECURSOS.comedero / 12, '#e2b33a')}${barra('agua', RECURSOS.agua / 10, '#5aa9e6')}</div>` +
               (mal ? `<div class="det" style="color:#b0442c">${mal} gallina${mal > 1 ? 's' : ''} con hambre o sed</div>` : '');
+      // el almacén y el clima
+      const cuenta = {};
+      for (const c of ALMACEN_R.comidas) cuenta[c.tipo] = (cuenta[c.tipo] || 0) + 1;
+      const comidas = Object.entries(cuenta).map(([k, n]) => `${n} ${NOMBRE_COMIDA[k]}${n > 1 ? (k === 'panMaiz' ? 'es' : 's') : ''}`.replace('pan de maízes', 'panes de maíz').replace('huevo duros', 'huevos duros'));
+      r += `<b>el almacén</b><br>huevos: ${ALMACEN_R.huevos.length} · maíz: ${Math.floor(ALMACEN_R.maiz)}${comidas.length ? `<br>${comidas.join(' · ')}` : ''}`;
+      const T = TEMPORAL;
+      r += `<div class="det" style="${T.estado === 'tormenta' ? 'color:#3d5f9e;font-weight:600' : ''}">` +
+           (T.estado === 'tormenta' ? `⛈ temporal: no pueden salir (${Math.ceil(T.t)} s)` : T.estado === 'aviso' ? '☁ se está nublando...' : T.estado === 'despejando' ? 'despejando...' : 'cielo despejado') + '</div>';
       for (const ev of EVENTOS) if (reloj - ev.t < 60) r += `<div class="det">${ev.texto}</div>`;
       if (r !== htmlRecursos) { htmlRecursos = r; panelRecursos.innerHTML = r; }
     }
@@ -5118,7 +5934,7 @@
         const libres = cubosLibres('jugarCon').sort((a, b) => Math.hypot(a.x - pos.x, a.z - pos.z) - Math.hypot(b.x - pos.x, b.z - pos.z));
         if (!libres.length) { mente.juego = null; mente.tAccion = 0; return; }
         Object.assign(mente.juego, { fase: 'buscar', cubo: libres[0] });
-        irA(dentroDelCuarto(CUARTOS[cuartoDe(libres[0].x)], libres[0].x, libres[0].z));
+        irA(dentroDelCuarto(CUARTOS[cuartoDe(libres[0].x, libres[0].z)], libres[0].x, libres[0].z));
         mente.tAccion = 30;
       }
     }
@@ -5127,9 +5943,9 @@
       j.repensar -= dt;
       if (j.repensar <= 0) {
         j.repensar = 0.5;
-        irA(dentroDelCuarto(CUARTOS[cuartoDe(o.pos.x)], o.pos.x, o.pos.z));
+        irA(dentroDelCuarto(CUARTOS[cuartoDe(o.pos.x, o.pos.z)], o.pos.x, o.pos.z));
         if (mente.noCabe) {   // se metió donde él no cabe
-          mente.aviso = cuartoDe(pos.x) === 1 && Math.hypot(pos.x - PUERTAS[1].x, pos.z - 260) < 450 ? '¡no quepo!' : 'bueno...';
+          mente.aviso = cuartoDe(pos.x, pos.z) === 1 && Math.hypot(pos.x - PUERTAS[1].x, pos.z - 260) < 450 ? '¡no quepo!' : 'bueno...';
           mente.tAviso = 1.8; mente.tAccion = 0; mente.juego = null;
           if (Math.random() < 0.5) { mente.molesto = 3; mente.molestoPor = 'tiros'; }
         }
@@ -5209,7 +6025,7 @@
         // el pequeño a veces se va a su pieza, donde el grande no cabe
         if (j.refugio === undefined) j.refugio = yo.escala < 0.8 && o.escala >= 0.8 && Math.random() < 0.5;
         if (j.refugio) {
-          if (cuartoDe(pos.x) === 2) {
+          if (cuartoDe(pos.x, pos.z) === 2) {
             if (!j.avisado) { j.avisado = true; mente.aviso = '¡aquí no puedes entrar!'; mente.tAviso = 2; mente.giroForzado = -Math.PI / 2; }
             mente.meta = null; mente.ruta = [];
             mente.mirarA = { pj: o };
@@ -5221,10 +6037,10 @@
           j.repensar = 0.6;
           const dx = pos.x - o.pos.x, dz = pos.z - o.pos.z, d = Math.hypot(dx, dz) || 1;
           const a = Math.atan2(dx, dz) + azarEntre(-0.8, 0.8);
-          mente.meta = dentroDelCuarto(CUARTOS[cuartoDe(pos.x)], pos.x + Math.sin(a) * 350, pos.z + Math.cos(a) * 350);
+          mente.meta = dentroDelCuarto(CUARTOS[cuartoDe(pos.x, pos.z)], pos.x + Math.sin(a) * 350, pos.z + Math.cos(a) * 350);
           mente.ruta = [];
           if (Math.hypot(mente.meta[0] - pos.x, mente.meta[2] - pos.z) < 60) {   // acorralado: hacia el otro lado
-            mente.meta = dentroDelCuarto(CUARTOS[cuartoDe(pos.x)], pos.x - Math.sin(a) * 350, pos.z + Math.cos(a) * 300);
+            mente.meta = dentroDelCuarto(CUARTOS[cuartoDe(pos.x, pos.z)], pos.x - Math.sin(a) * 350, pos.z + Math.cos(a) * 300);
           }
         }
         mente.corre = true;
@@ -5372,6 +6188,9 @@
       moverPuerta(dt);
       moverCubos(dt);
       moverPatio(dt);
+      moverTemporal(dt);
+      moverAlmacen(dt);
+      moverCartas(dt);
     }
     function animar(ahora) {
       const dt = Math.min((ahora - antes) / 1000, 0.05);

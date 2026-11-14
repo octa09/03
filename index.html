@@ -125,20 +125,10 @@
       transition: filter 3s;
     }
     .piso.patio, .pared.patio, .techo.patio, .lampara.sol { transition: filter 3s; }
-    /* la lluvia y los rayos (encima de todo, sin atrapar el mouse) */
-    #lluvia, #rayo { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 2s; }
-    #lluvia {
-      background:
-        repeating-linear-gradient(105deg, transparent 0 22px, rgba(190, 210, 235, 0.35) 22px 23px, transparent 23px 61px),
-        repeating-linear-gradient(100deg, transparent 0 37px, rgba(190, 210, 235, 0.25) 37px 38px, transparent 38px 83px),
-        rgba(30, 40, 60, 0.18);
-      background-size: 120px 160px, 170px 230px, auto;
-      animation: llueve 0.35s linear infinite;
+    /* el rayo ilumina solo el patio */
+    body.tormenta.rayo .piso.patio, body.tormenta.rayo .pared.patio, body.tormenta.rayo .techo.patio {
+      filter: brightness(1.5) saturate(0.4); transition: none;
     }
-    body.lloviendo #lluvia { opacity: 1; }
-    body.lloviendo.adentro #lluvia { opacity: 0.25; }
-    @keyframes llueve { to { background-position: -40px 160px, -40px 230px, 0 0; } }
-    #rayo { background: #f4f7ff; transition: none; }
     /* La lámpara en el centro de cada techo */
     .lampara {
       border-radius: 50%;
@@ -264,7 +254,6 @@
   </div>
 
   <canvas id="pelota"></canvas>
-  <div id="lluvia"></div><div id="rayo"></div>
 
   <div class="ayuda">W A S D: mover · Espacio: saltar · Shift: correr · Arrastrar o flechas: cámara · Rueda: zoom · Clic en él: un golpe · Clic derecho en él: una caricia · Clic en una gallina: espantarla · Y: que llegue un temporal · 1 / 2: controlar al grande / al pequeño · I: ver lo que piensan · T: tiempo más rápido · 0: cámara libre (W A S D, Q / E) · H: ocultar las stats · Déjalos solos y hacen su vida</div>
   <div class="animo">curioso</div>
@@ -2425,7 +2414,6 @@
       // (si la cámara quedó fuera de la casa, se ve todo desde afuera)
       const camDentro = CUARTOS.some(c => ojo[0] >= c.x0 && ojo[0] < c.x1 && ojo[2] >= c.z0 && ojo[2] < c.z1);
       const camCuarto = cuartoDe(ojo[0], ojo[2]), verPatio = !camDentro || [PATIO, 0, JUEGOS, ALMACEN].includes(camCuarto);   // (desde las piezas de la derecha no se alcanza a ver)
-      document.body.classList.toggle('adentro', camDentro && camCuarto !== PATIO);
       dibujarPatio(ponerObjeto, verPatio);
 
       // Solo las caras que miran a la cámara (las de atrás quedan tapadas igual)
@@ -2560,6 +2548,25 @@
           ctx.drawImage(negra, bx, by, bw, bh, bx + dx, by + dy, bw, bh);
         }
         ctx.drawImage(capa, bx, by, bw, bh, bx, by, bw, bh);
+      }
+
+      // La lluvia: rayitas que caen solo en el patio (sin contorno, recortadas a lo que se ve del patio)
+      if (TEMPORAL.estado === 'tormenta' && verPatio) {
+        ctx.save();
+        ctx.setTransform(r, 0, 0, r, 0, 0);
+        const rec = recortes[PATIO];
+        if (rec) for (const k of rec) ctx.clip(k, 'evenodd');
+        ctx.strokeStyle = 'rgba(200, 218, 240, 0.75)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (const gota of GOTAS) {
+          if (gota.y <= 0) continue;
+          const a = [gota.x, -gota.y - 46, gota.z], b = [gota.x, -gota.y, gota.z];
+          if (zCam(a) > PERSPECTIVA - 12 || zCam(b) > PERSPECTIVA - 12) continue;
+          const pa = proyectar(a), pb = proyectar(b);
+          ctx.moveTo(pa[0], pa[1]); ctx.lineTo(pb[0], pb[1]);
+        }
+        ctx.stroke();
+        ctx.restore();
       }
 
       // Zzz cuando duerme
@@ -4513,12 +4520,20 @@
 
     // ---- El temporal ----
     const TEMPORAL = { estado: 'calma', t: azarEntre(240, 420), dur: 0, fuerza: 0, rayo: 0, gotas: [] };
-    const elRayo = document.getElementById('rayo');
+    // las gotas: caen solo dentro del patio
+    const GOTAS = Array.from({ length: 110 }, () => ({ x: 0, y: -1, z: 0 }));
+    function moverGotas(dt) {
+      const P = CUARTOS[PATIO];
+      for (const g of GOTAS) {
+        g.y -= 1500 * dt;
+        if (g.y < 0) { g.x = azarEntre(P.x0 + 10, P.x1 - 10); g.z = azarEntre(P.z0 + 10, P.z1 - 10); g.y = azarEntre(ALTO_CUARTO * 0.4, ALTO_CUARTO); }
+      }
+    }
     function moverTemporal(dt) {
       const T = TEMPORAL;
       T.rayo = Math.max(0, T.rayo - dt);
-      elRayo.style.opacity = T.rayo > 0.25 ? 0.55 : T.rayo > 0.12 ? 0 : T.rayo > 0 ? 0.3 : 0;
-      document.body.classList.toggle('lloviendo', T.estado === 'tormenta');
+      document.body.classList.toggle('rayo', T.rayo > 0.25 || (T.rayo > 0 && T.rayo < 0.12));
+      if (T.estado === 'tormenta') moverGotas(dt);
       T.t -= dt;
       if (T.estado === 'calma' && T.t <= 0) {
         T.estado = 'aviso'; T.t = 22;
